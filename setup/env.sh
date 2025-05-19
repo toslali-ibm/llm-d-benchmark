@@ -65,7 +65,7 @@ export LLMDBENCH_VLLM_DEPLOYER_EPP_PREFILL_SESSION_AWARE_SCORER_WEIGHT=${LLMDBEN
 # Experiments
 export LLMDBENCH_FMPERF_CONDA_ENV_NAME="${LLMDBENCH_FMPERF_CONDA_ENV_NAME:-fmperf-env}"
 export LLMDBENCH_FMPERF_EXPERIMENT_HARNESS="${LLMDBENCH_FMPERF_EXPERIMENT_HARNESS:-llm-d-benchmark.py}"
-export LLMDBENCH_FMPERF_EXPERIMENT_PROFILE="${LLMDBENCH_FMPERF_EXPERIMENT_PROFILE:-sanity_short_input.yaml}"
+export LLMDBENCH_FMPERF_EXPERIMENT_PROFILE="${LLMDBENCH_FMPERF_EXPERIMENT_PROFILE:-sanity_short-input.yaml}"
 export LLMDBENCH_FMPERF_PVC_NAME="${LLMDBENCH_FMPERF_PVC_NAME:-"workload-pvc"}"
 export LLMDBENCH_FMPERF_PVC_SIZE="${LLMDBENCH_FMPERF_PVC_SIZE:-20Gi}"
 export LLMDBENCH_FMPERF_CONTAINER_IMAGE=${LLMDBENCH_FMPERF_CONTAINER_IMAGE:-lmcache/lmcache-benchmark:main}
@@ -192,7 +192,7 @@ elif [[ -z $LLMDBENCH_CLUSTER_URL || $LLMDBENCH_CLUSTER_URL == "auto" ]]; then
   export LLMDBENCH_CONTROL_CLUSTER_NAME=$(echo $current_context | cut -d '/' -f 2 | cut -d '-' -f 2)
   if [[ $LLMDBENCH_CONTROL_WARNING_DISPLAYED -eq 0 ]]; then
     echo "WARNING: environment variable LLMDBENCH_CLUSTER_URL=$LLMDBENCH_CLUSTER_URL. Will attempt to use current context \"${current_context}\"."
-    LLMDBENCH_CONTROL_WARNING_DISPLAYED=1
+    export LLMDBENCH_CONTROL_WARNING_DISPLAYED=1
     sleep 5
   fi
   ${LLMDBENCH_CONTROL_KCMD} config view --minify --flatten --raw --context=${current_context} > $LLMDBENCH_CONTROL_WORK_DIR/environment/context.ctx

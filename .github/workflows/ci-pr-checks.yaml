@@ -1,0 +1,16 @@
+name: CI - PR Checks
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        
+      - name: Sanity check repo contents
+        run: ls -la

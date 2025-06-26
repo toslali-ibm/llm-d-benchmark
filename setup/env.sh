@@ -93,6 +93,7 @@ export LLMDBENCH_VLLM_DEPLOYER_EPP_DECODE_SESSION_AWARE_SCORER_WEIGHT=${LLMDBENC
 
 # Harness and Experiment
 export LLMDBENCH_HARNESS_NAME=${LLMDBENCH_HARNESS_NAME:-fmperf}
+export LLMDBENCH_HARNESS_EXECUTABLE=${LLMDBENCH_HARNESS_EXECUTABLE:-llm-d-benchmark.sh}
 export LLMDBENCH_HARNESS_CONDA_ENV_NAME="${LLMDBENCH_HARNESS_CONDA_ENV_NAME:-${LLMDBENCH_HARNESS_NAME}-env}"
 # FIXME: Attempt to make LLMDBENCH_VLLM_COMMON_NAMESPACE and LLMDBENCH_HARNESS_NAMESPACE different (need to be same now)
 #export LLMDBENCH_HARNESS_NAMESPACE=${LLMDBENCH_HARNESS_NAMESPACE:-${LLMDBENCH_HARNESS_NAME}}
@@ -105,8 +106,6 @@ export LLMDBENCH_HARNESS_CONTAINER_IMAGE=${LLMDBENCH_HARNESS_CONTAINER_IMAGE:-lm
 export LLMDBENCH_HARNESS_SKIP_RUN=${LLMDBENCH_HARNESS_SKIP_RUN:-}
 
 export LLMDBENCH_RUN_HARNESS_LAUNCHER_NAME=${LLMDBENCH_RUN_HARNESS_LAUNCHER_NAME:-llmdbench-fmperf-launcher}
-export LLMDBENCH_RUN_EXPERIMENT_HARNESS="${LLMDBENCH_RUN_EXPERIMENT_HARNESS:-llm-d-benchmark.py}"
-export LLMDBENCH_RUN_EXPERIMENT_ANALYZER="${LLMDBENCH_RUN_EXPERIMENT_ANALYZER:-analyze_results.py}"
 export LLMDBENCH_RUN_EXPERIMENT_ANALYZE_LOCALLY="${LLMDBENCH_RUN_EXPERIMENT_ANALYZE_LOCALLY:-0}"
 
 # LLM-D-Benchmark deployment specific variables
@@ -393,15 +392,14 @@ function llmdbench_execute_cmd {
   local counter=1
   local delay=10
 
+  command_tstamp=$(date +%s%N)
   if [[ ${dry_run} -eq 1 ]]; then
-
     _msg="---> would have executed the command \"${actual_cmd}\""
     echo ${_msg}
-    echo ${_msg} > ${LLMDBENCH_CONTROL_WORK_DIR}/setup/commands/$(date +%s%N)_command.log
+    echo ${_msg} > ${LLMDBENCH_CONTROL_WORK_DIR}/setup/commands/${command_tstamp}_command.log
     return 0
   else
     _msg="---> will execute the command \"${actual_cmd}\""
-    command_tstamp=$(date +%s%N)
     echo ${_msg} > ${LLMDBENCH_CONTROL_WORK_DIR}/setup/commands/${command_tstamp}_command.log
     while [[ "${counter}" -le "${attempts}" ]]; do
       command_tstamp=$(date +%s%N)

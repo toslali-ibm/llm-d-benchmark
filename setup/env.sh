@@ -40,6 +40,7 @@ export LLMDBENCH_VLLM_COMMON_PVC_MODEL_CACHE_SIZE="${LLMDBENCH_VLLM_COMMON_PVC_M
 export LLMDBENCH_VLLM_COMMON_PVC_DOWNLOAD_TIMEOUT=${LLMDBENCH_VLLM_COMMON_PVC_DOWNLOAD_TIMEOUT:-"2400"}
 export LLMDBENCH_VLLM_COMMON_HF_TOKEN_NAME=${LLMDBENCH_VLLM_COMMON_HF_TOKEN_NAME:-"llm-d-hf-token"}
 export LLMDBENCH_VLLM_COMMON_INFERENCE_PORT=${LLMDBENCH_VLLM_COMMON_INFERENCE_PORT:-"8000"}
+export LLMDBENCH_VLLM_COMMON_FQDN=${LLMDBENCH_VLLM_COMMON_FQDN:-".svc.cluster.local"}
 
 # Standalone-specific parameters
 export LLMDBENCH_VLLM_STANDALONE_PVC_MOUNTPOINT=${LLMDBENCH_VLLM_STANDALONE_PVC_MOUNTPOINT:-/models}
@@ -96,6 +97,7 @@ export LLMDBENCH_VLLM_DEPLOYER_EPP_DECODE_SESSION_AWARE_SCORER_WEIGHT=${LLMDBENC
 export LLMDBENCH_HARNESS_NAME=${LLMDBENCH_HARNESS_NAME:-fmperf}
 export LLMDBENCH_HARNESS_EXECUTABLE=${LLMDBENCH_HARNESS_EXECUTABLE:-llm-d-benchmark.sh}
 export LLMDBENCH_HARNESS_CONDA_ENV_NAME="${LLMDBENCH_HARNESS_CONDA_ENV_NAME:-${LLMDBENCH_HARNESS_NAME}-env}"
+export LLMDBENCH_HARNESS_WAIT_TIMEOUT=${LLMDBENCH_HARNESS_WAIT_TIMEOUT:-900}
 # FIXME: Attempt to make LLMDBENCH_VLLM_COMMON_NAMESPACE and LLMDBENCH_HARNESS_NAMESPACE different (need to be same now)
 #export LLMDBENCH_HARNESS_NAMESPACE=${LLMDBENCH_HARNESS_NAMESPACE:-${LLMDBENCH_HARNESS_NAME}}
 export LLMDBENCH_HARNESS_NAMESPACE=${LLMDBENCH_VLLM_COMMON_NAMESPACE}
@@ -156,7 +158,7 @@ fi
 
 if [[ $LLMDBENCH_CONTROL_DEPENDENCIES_CHECKED -eq 0 && ! -f ~/.llmdbench_dependencies_checked ]]
 then
-  deplist="$LLMDBENCH_CONTROL_SCMD $LLMDBENCH_CONTROL_PCMD $LLMDBENCH_CONTROL_KCMD $LLMDBENCH_CONTROL_HCMD kubectl kustomize"
+  deplist="$LLMDBENCH_CONTROL_SCMD $LLMDBENCH_CONTROL_PCMD $LLMDBENCH_CONTROL_KCMD $LLMDBENCH_CONTROL_HCMD kubectl kustomize rsync"
   echo "Checking dependencies \"$deplist\""
   for req in $deplist kubectl kustomize; do
     echo -n "Checking dependency \"${req}\"..."
@@ -430,7 +432,11 @@ function llmdbench_execute_cmd {
   then
     echo "ERROR while executing command \"${actual_cmd}\""
     echo
-    cat ${LLMDBENCH_CONTROL_WORK_DIR}/setup/commands/${command_tstamp}_stderr.log
+    if [[ ${LLMDBENCH_CONTROL_WORK_DIR}/setup/commands/${command_tstamp}_stderr.log ]]; then
+      cat ${LLMDBENCH_CONTROL_WORK_DIR}/setup/commands/${command_tstamp}_stderr.log
+    else
+      echo "(stderr not captured)"
+    fi
   fi
 
   set -euo pipefail

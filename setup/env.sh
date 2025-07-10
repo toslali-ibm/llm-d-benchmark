@@ -125,6 +125,7 @@ export LLMDBENCH_CONTROL_DEPENDENCIES_CHECKED=${LLMDBENCH_CONTROL_DEPENDENCIES_C
 export LLMDBENCH_CONTROL_OVERRIDE_COMMAND_DISPLAYED=${LLMDBENCH_CONTROL_OVERRIDE_COMMAND_DISPLAYED:-0}
 export LLMDBENCH_CONTROL_PERMISSIONS_CHECKED=${LLMDBENCH_CONTROL_PERMISSIONS_CHECKED:-0}
 export LLMDBENCH_CONTROL_WARNING_DISPLAYED=${LLMDBENCH_CONTROL_WARNING_DISPLAYED:-0}
+export LLMDBENCH_CONTROL_STANDUP_ALL_STEPS=${LLMDBENCH_CONTROL_STANDUP_ALL_STEPS:-0}
 export LLMDBENCH_CONTROL_WAIT_TIMEOUT=${LLMDBENCH_CONTROL_WAIT_TIMEOUT:-900}
 export LLMDBENCH_CONTROL_CHECK_CLUSTER_AUTHORIZATIONS=${LLMDBENCH_CONTROL_CHECK_CLUSTER_AUTHORIZATIONS:-0}
 export LLMDBENCH_CONTROL_RESOURCE_LIST=deployment,httproute,route,service,gateway,gatewayparameters,inferencepool,inferencemodel,cm,ing,pod,job
@@ -252,13 +253,19 @@ if [[ ! -z $is_csv_model_list ]]; then
 fi
 
 export LLMDBENCH_CONTROL_WORK_DIR=${LLMDBENCH_CONTROL_WORK_DIR:-$(mktemp -d -t ${LLMDBENCH_CONTROL_CLUSTER_NAME}-$(echo $0 | rev | cut -d '/' -f 1 | rev | $LLMDBENCH_CONTROL_SCMD -e 's^.sh^^g' -e 's^./^^g')XXX)}
+export LLMDBENCH_CONTROL_WORK_DIR_SET=${LLMDBENCH_CONTROL_WORK_DIR_SET:-0}
 
-mkdir -p ${LLMDBENCH_CONTROL_WORK_DIR}/setup/yamls
-mkdir -p ${LLMDBENCH_CONTROL_WORK_DIR}/setup/commands
-mkdir -p ${LLMDBENCH_CONTROL_WORK_DIR}/environment
-mkdir -p ${LLMDBENCH_CONTROL_WORK_DIR}/workload/harnesses
-mkdir -p ${LLMDBENCH_CONTROL_WORK_DIR}/workload/profiles
-mkdir -p ${LLMDBENCH_CONTROL_WORK_DIR}/results
+function prepare_work_dir {
+  mkdir -p ${LLMDBENCH_CONTROL_WORK_DIR}/setup/yamls
+  mkdir -p ${LLMDBENCH_CONTROL_WORK_DIR}/setup/commands
+  mkdir -p ${LLMDBENCH_CONTROL_WORK_DIR}/environment
+  mkdir -p ${LLMDBENCH_CONTROL_WORK_DIR}/workload/harnesses
+  mkdir -p ${LLMDBENCH_CONTROL_WORK_DIR}/workload/profiles
+  mkdir -p ${LLMDBENCH_CONTROL_WORK_DIR}/results
+}
+export -f prepare_work_dir
+
+prepare_work_dir
 
 if [[ ! -f $LLMDBENCH_CONTROL_WORK_DIR/environment/context.ctx ]]; then
   if [[ -f ${HOME}/.kube/config-${LLMDBENCH_CONTROL_CLUSTER_NAME} ]]; then
@@ -271,7 +278,9 @@ if [[ ! -f $LLMDBENCH_CONTROL_WORK_DIR/environment/context.ctx ]]; then
     ${LLMDBENCH_CONTROL_KCMD} config view --minify --flatten --raw --context=${current_context} > $LLMDBENCH_CONTROL_WORK_DIR/environment/context.ctx
     export LLMDBENCH_CONTROL_CLUSTER_NAME=$(echo $current_context | cut -d '/' -f 2 | cut -d '-' -f 2)
     if [[ $LLMDBENCH_CONTROL_WARNING_DISPLAYED -eq 0 ]]; then
+      echo ""
       echo "WARNING: environment variable LLMDBENCH_CLUSTER_URL=$LLMDBENCH_CLUSTER_URL. Will attempt to use current context \"${current_context}\"."
+      echo ""
       export LLMDBENCH_CONTROL_WARNING_DISPLAYED=1
       sleep 5
     fi

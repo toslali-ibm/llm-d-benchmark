@@ -38,11 +38,19 @@ spec:
       - name: vllm-standalone-$(model_attribute $model label)
         image: $(get_image ${LLMDBENCH_VLLM_STANDALONE_IMAGE_REGISTRY} ${LLMDBENCH_VLLM_STANDALONE_IMAGE_REPO} ${LLMDBENCH_VLLM_STANDALONE_IMAGE_NAME} ${LLMDBENCH_VLLM_STANDALONE_IMAGE_TAG})
         imagePullPolicy: Always
-        command: ["/bin/sh", "-c"]
+        command:
+        - /bin/bash
         args:
-        - >
-          $(render_string $LLMDBENCH_VLLM_STANDALONE_ARGS $model)
+        - "-c"
+        - |
+          $(render_string $LLMDBENCH_VLLM_STANDALONE_ARGS $model) --model-loader-extra-config "\${LLMDBENCH_VLLM_STANDALONE_MODEL_LOADER_EXTRA_CONFIG}"
         env:
+        - name: LLMDBENCH_VLLM_STANDALONE_MODEL
+          value: "$(model_attribute $model model)"
+        - name: LLMDBENCH_VLLM_STANDALONE_VLLM_LOAD_FORMAT
+          value: "${LLMDBENCH_VLLM_STANDALONE_VLLM_LOAD_FORMAT}"
+        - name: LLMDBENCH_VLLM_STANDALONE_MODEL_LOADER_EXTRA_CONFIG
+          value: "{}"
         - name: HF_HOME
           value: ${LLMDBENCH_VLLM_STANDALONE_PVC_MOUNTPOINT}
         - name: HUGGING_FACE_HUB_TOKEN
@@ -84,11 +92,17 @@ spec:
             $(echo "$LLMDBENCH_VLLM_COMMON_ACCELERATOR_RESOURCE: \"${LLMDBENCH_VLLM_COMMON_ACCELERATOR_NR}\"")
             ephemeral-storage: ${LLMDBENCH_VLLM_STANDALONE_EPHEMERAL_STORAGE}
         volumeMounts:
+        - name: preprocesses
+          mountPath: /workload/preprocesses
         - name: cache-volume
           mountPath: ${LLMDBENCH_VLLM_STANDALONE_PVC_MOUNTPOINT}
         - name: shm
           mountPath: /dev/shm
       volumes:
+      - name: preprocesses
+        configMap:
+          name: llm-d-benchmark-preprocesses
+          defaultMode: 0500
       - name: cache-volume
         persistentVolumeClaim:
           claimName: ${LLMDBENCH_VLLM_COMMON_PVC_NAME}

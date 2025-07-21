@@ -291,6 +291,32 @@ else
   fi
 fi
 
+if [[ $LLMDBENCH_CONTROL_DEPENDENCIES_CHECKED -eq 0 ]]
+then
+  touch ~/.llmdbench_dependencies_checked
+  deplist="$LLMDBENCH_CONTROL_SCMD $LLMDBENCH_CONTROL_PCMD $(echo $LLMDBENCH_CONTROL_KCMD | awk '{ print $1}') $(echo $LLMDBENCH_CONTROL_HCMD | awk '{ print $1}') helmfile kubectl kustomize rsync"
+  for req in $deplist; do
+    is_checked=$(grep "$req already installed" ~/.llmdbench_dependencies_checked || true)
+    if [[ -z ${is_checked} ]]; then
+      echo -n "Checking dependency \"${req}\"..."
+      is_req=$(which ${req} || true)
+      if [[ -z ${is_req} ]]; then
+        echo "❌ Dependency \"${req}\" is missing. Please run \"$LLMDBENCH_MAIN_DIR/setup/install_deps.sh\" and try again."
+        exit 1
+      else
+        echo "$req already installed" >> ~/.llmdbench_dependencies_checked
+      fi
+      echo "done"
+    fi
+  done
+  echo
+  is_helmdiff=$($LLMDBENCH_CONTROL_HCMD plugin list | grep diff || true)
+  if [[ -z $is_helmdiff ]]; then
+    helm plugin install https://github.com/databus23/helm-diff
+  fi
+  export LLMDBENCH_CONTROL_DEPENDENCIES_CHECKED=1
+fi
+
 function get_image {
   local image_registry=$1
   local image_repo=$2
@@ -747,9 +773,13 @@ create_namespace() {
   local namespace="$2"
   require_var "namespace" "${namespace}"
   announce "📦 Creating namespace ${namespace}..."
-  llmdbench_execute_cmd "${kcmd} create namespace \"${namespace}\" --dry-run=client -o yaml > ${LLMDBENCH_CONTROL_WORK_DIR}/setup/yamls/${LLMDBENCH_CURRENT_STEP}_namespace.yaml" ${LLMDBENCH_CONTROL_DRY_RUN} ${LLMDBENCH_CONTROL_VERBOSE}
-  llmdbench_execute_cmd "${kcmd} apply -f ${LLMDBENCH_CONTROL_WORK_DIR}/setup/yamls/${LLMDBENCH_CURRENT_STEP}_namespace.yaml" ${LLMDBENCH_CONTROL_DRY_RUN} ${LLMDBENCH_CONTROL_VERBOSE}
-  announce "✅ Namespace ready"
+
+  is_ns=$($LLMDBENCH_CONTROL_KCMD get namespace -o name| grep -E "namespace/${namespace}$" || true)
+  if [[ -z ${is_ns} ]]; then
+    llmdbench_execute_cmd "${kcmd} create namespace \"${namespace}\" --dry-run=client -o yaml > ${LLMDBENCH_CONTROL_WORK_DIR}/setup/yamls/${LLMDBENCH_CURRENT_STEP}_namespace.yaml" ${LLMDBENCH_CONTROL_DRY_RUN} ${LLMDBENCH_CONTROL_VERBOSE}
+    llmdbench_execute_cmd "${kcmd} apply -f ${LLMDBENCH_CONTROL_WORK_DIR}/setup/yamls/${LLMDBENCH_CURRENT_STEP}_namespace.yaml" ${LLMDBENCH_CONTROL_DRY_RUN} ${LLMDBENCH_CONTROL_VERBOSE}
+    announce "✅ Namespace ready"
+  fi
 }
 export -f create_namespace
 

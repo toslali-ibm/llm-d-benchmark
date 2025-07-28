@@ -320,7 +320,7 @@ function render_template {
   rm -f $LLMDBENCH_CONTROL_WORK_DIR/setup/sed-commands
   touch $LLMDBENCH_CONTROL_WORK_DIR/setup/sed-commands
 
-  for entry in $(cat ${template_file_path} | $LLMDBENCH_CONTROL_SCMD -e 's^-^\n^g' -e 's^:^\n^g' -e 's^ ^\n^g' -e 's^ ^^g' | grep -E "REPLACE_ENV" | uniq); do
+  for entry in $(cat ${template_file_path} | $LLMDBENCH_CONTROL_SCMD -e 's^-^\n^g' -e 's^:^\n^g' -e 's^ ^\n^g' -e 's^ ^^g' -e 's^\.^\n^g' -e 's^\/^\n^g' | grep -E "REPLACE_ENV" | uniq); do
     render_string $entry &>/dev/null
   done
 
@@ -745,6 +745,13 @@ spec:
     command: ["sh", "-c"]
     args:
     - "${LLMDBENCH_HARNESS_EXECUTABLE}"
+    resources:
+      limits:
+        cpu: "${LLMDBENCH_HARNESS_CPU_NR}"
+        memory: ${LLMDBENCH_HARNESS_CPU_MEM}
+      requests:
+        cpu: "${LLMDBENCH_HARNESS_CPU_NR}"
+        memory: ${LLMDBENCH_HARNESS_CPU_MEM}
     env:
     - name: LLMDBENCH_RUN_EXPERIMENT_LAUNCHER
       value: "1"

@@ -64,10 +64,10 @@ RUN cd guidellm; \
     git checkout ${GUIDELLM_COMMIT}; \
     pip install .
 
-RUN echo "fmperf: ${FM_PERF_REPO}" > /workspace/repos.txt; \
-    echo "inference-perf: ${INFERENCE_PERF_REPO}" >> /workspace/repos.txt; \
-    echo "vllm-benchmark: ${VLLM_BENCHMARK_REPO}" >> /workspace/repos.txt; \
-    echo "guidellm: ${GUIDELLM_REPO}" >> /workspace/repos.txt
+RUN echo "fmperf: ${FM_PERF_REPO} ${FM_PERF_BRANCH}" > /workspace/repos.txt; \
+    echo "inference-perf: ${INFERENCE_PERF_REPO} ${INFERENCE_PERF_BRANCH}" >> /workspace/repos.txt; \
+    echo "vllm-benchmark: ${VLLM_BENCHMARK_REPO} ${VLLM_BENCHMARK_COMMIT}" >> /workspace/repos.txt; \
+    echo "guidellm: ${GUIDELLM_REPO} ${GUIDELLM_COMMIT}" >> /workspace/repos.txt
 
 RUN ln -s /usr/bin/sleep /usr/local/bin/sleep
 

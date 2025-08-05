@@ -135,6 +135,7 @@ export LLMDBENCH_CONTROL_CLI_OPTS_PROCESSED=1
 
 source ${LLMDBENCH_CONTROL_DIR}/env.sh
 
+
 _e=$(echo ${LLMDBENCH_STEP_LIST} | grep "[0-9]-[0-9]" | grep -v 11_ || true)
 if [[ ! -z ${_e} ]]; then
   LLMDBENCH_STEP_LIST=$(eval echo $(echo {${LLMDBENCH_STEP_LIST}} | $LLMDBENCH_CONTROL_SCMD 's^-^..^g'))

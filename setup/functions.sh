@@ -28,14 +28,19 @@ function model_attribute {
   # Do not use associative arrays. Not supported by MacOS with older bash versions
 
   case "$model" in
-    "llama-1b") local model=meta-llama/Llama-3.2-1B-Instruct ;;
-    "llama-3b") local model=meta-llama/Llama-3.2-3B-Instruct ;;
-    "llama-8b") local model=meta-llama/Llama-3.1-8B-Instruct ;;
-    "llama-70b") local model=meta-llama/Llama-3.1-70B-Instruct ;;
-    "llama-17b") local model=meta-llama/Llama-4-Scout-17B-16E-Instruct ;;
+    "llama-1b") local model=meta-llama/Llama-3.2-1B-Instruct:llama-1b ;;
+    "llama-3b") local model=meta-llama/Llama-3.2-3B-Instruct:llama-3b ;;
+    "llama-8b") local model=meta-llama/Llama-3.1-8B-Instruct:llama-8b ;;
+    "llama-70b") local model=meta-llama/Llama-3.1-70B-Instruct:llama-70b ;;
+    "llama-17b") local model=meta-llama/Llama-4-Scout-17B-16E-Instruct:llama-17b ;;
     *)
       true ;;
   esac
+  
+  # model is of the form namespace/modelid:uniqueid
+  local modelid=$(echo $model | cut -d: -f2)
+  model=$(echo $model | cut -d: -f1)
+  local modelid_label="$(echo -n $modelid | cut -d '/' -f 1 | cut -c1-8)-$(echo -n $modelid | sha256sum | awk '{print $1}' | cut -c1-8)-$(echo -n $modelid | cut -d '/' -f 2 | rev | cut -c1-8 | rev)"
 
   local modelcomponents=$(echo $model | cut -d '/' -f 2 |  tr '[:upper:]' '[:lower:]' | $LLMDBENCH_CONTROL_SCMD -e 's^qwen^qwen-^g' -e 's^-^\n^g')
   local provider=$(echo $model | cut -d '/' -f 1)
@@ -274,7 +279,7 @@ function render_string {
       echo "s^\[^- \"^g" >> $LLMDBENCH_CONTROL_WORK_DIR/setup/sed-commands
       echo "s^\]^\" ^g" >> $LLMDBENCH_CONTROL_WORK_DIR/setup/sed-commands
     fi
-    if [[ $LLMDBENCH_CURRENT_STEP == "08" ]]; then
+    if [[ $LLMDBENCH_CURRENT_STEP == "09" ]]; then
       echo "s^____--^\"\nREPLACE_SPACESC- \"--^g" >> $LLMDBENCH_CONTROL_WORK_DIR/setup/sed-commands
       echo "s^____^\"\nREPLACE_SPACESC- \"^g" >> $LLMDBENCH_CONTROL_WORK_DIR/setup/sed-commands
       echo "s^\[^- \"^g" >> $LLMDBENCH_CONTROL_WORK_DIR/setup/sed-commands
@@ -336,7 +341,7 @@ function render_template {
       local spacec=$(printf '%*s' 12 '')
     fi
 
-    if [[ $LLMDBENCH_CURRENT_STEP == "08" ]]; then
+    if [[ $LLMDBENCH_CURRENT_STEP == "09" ]]; then
       echo "- |"
       local spacec=$(printf '%*s' 8 '')
     fi
@@ -349,7 +354,7 @@ function render_template {
     if [[ $LLMDBENCH_CURRENT_STEP == "06" ]]; then
       local spacec=$(printf '%*s' 8 '')
     fi
-    if [[ $LLMDBENCH_CURRENT_STEP == "08" ]]; then
+    if [[ $LLMDBENCH_CURRENT_STEP == "09" ]]; then
       local spacec=$(printf '%*s' 6 '')
     fi
     echo "s^REPLACE_SPACESC^$spacec^g" >> $LLMDBENCH_CONTROL_WORK_DIR/setup/sed-commands
@@ -387,7 +392,7 @@ function add_command_line_options {
       local spacec=$(printf '%*s' 12 '')
   fi
 
-  if [[ $LLMDBENCH_CURRENT_STEP == "08" ]]; then
+  if [[ $LLMDBENCH_CURRENT_STEP == "09" ]]; then
     local preamble=
     local spacec=$(printf '%*s' 6 '')
   fi
@@ -865,7 +870,7 @@ function get_model_name_from_pod {
 
     local url=$url/v1/models
 
-    local response=$(llmdbench_execute_cmd "${LLMDBENCH_CONTROL_KCMD} run testinference-pod-$(get_rand_string) -n $namespace --attach --restart=Never --rm --image=$image --quiet --command -- bash -c \"curl --no-progress-meter $url\"" ${LLMDBENCH_CONTROL_DRY_RUN} ${LLMDBENCH_CONTROL_VERBOSE} 0 2)
+    local response=$(llmdbench_execute_cmd "${LLMDBENCH_CONTROL_KCMD} run testinference-pod-$(get_rand_string) -n $namespace --attach --restart=Never --rm --image=$image --quiet --command -- bash -c \"curl --no-progress-meter $url\"" ${LLMDBENCH_CONTROL_DRY_RUN} 0 0 2)
     is_jq=$(echo $response | jq -r . || true)
 
     if [[ -z $is_jq ]]; then

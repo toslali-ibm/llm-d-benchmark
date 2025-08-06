@@ -40,46 +40,6 @@ if [[ $LLMDBENCH_CONTROL_ENVIRONMENT_TYPE_MODELSERVICE_ACTIVE -eq 1 ]]; then
     fi
   fi
 
-  llmdbench_execute_cmd "mkdir -p ${LLMDBENCH_CONTROL_WORK_DIR}/setup/helm/${LLMDBENCH_VLLM_MODELSERVICE_RELEASE}" ${LLMDBENCH_CONTROL_DRY_RUN} ${LLMDBENCH_CONTROL_VERBOSE}
-
-  cat << EOF > $LLMDBENCH_CONTROL_WORK_DIR/setup/helm/${LLMDBENCH_VLLM_MODELSERVICE_RELEASE}/helmfile.yaml
-repositories:
-  - name: ${LLMDBENCH_VLLM_MODELSERVICE_HELM_REPOSITORY}
-    url: https://llm-d-incubation.github.io/llm-d-modelservice/
-
-releases:
-  - name: infra-${LLMDBENCH_VLLM_MODELSERVICE_RELEASE}
-    namespace: ${LLMDBENCH_VLLM_COMMON_NAMESPACE}
-    chart: ${LLMDBENCH_VLLM_INFRA_CHART_NAME}
-    version: ${LLMDBENCH_VLLM_INFRA_CHART_VERSION}
-    installed: true
-    labels:
-      managedBy: llm-d-infra-installer
-
-  - name: ms-${LLMDBENCH_VLLM_MODELSERVICE_RELEASE}
-    namespace: ${LLMDBENCH_VLLM_COMMON_NAMESPACE}
-    chart: ${LLMDBENCH_VLLM_MODELSERVICE_HELM_REPOSITORY}/${LLMDBENCH_VLLM_MODELSERVICE_CHART_NAME}
-    version: ${LLMDBENCH_VLLM_MODELSERVICE_CHART_VERSION}
-    installed: true
-    needs:
-      -  ${LLMDBENCH_VLLM_COMMON_NAMESPACE}/infra-${LLMDBENCH_VLLM_MODELSERVICE_RELEASE}
-    values:
-      - ms-${LLMDBENCH_VLLM_MODELSERVICE_RELEASE}/values.yaml
-    labels:
-      managedBy: helmfile
-
-  - name: gaie-${LLMDBENCH_VLLM_MODELSERVICE_RELEASE}
-    namespace: ${LLMDBENCH_VLLM_COMMON_NAMESPACE}
-    chart: ${LLMDBENCH_VLLM_GAIE_CHART_NAME}
-    version: ${LLMDBENCH_VLLM_GAIE_CHART_VERSION}
-    installed: true
-    needs:
-      -  ${LLMDBENCH_VLLM_COMMON_NAMESPACE}/infra-${LLMDBENCH_VLLM_MODELSERVICE_RELEASE}
-    values:
-      - gaie-${LLMDBENCH_VLLM_MODELSERVICE_RELEASE}/values.yaml
-    labels:
-      managedBy: helmfile
-EOF
 else
   announce "⏭️ Environment types are \"${LLMDBENCH_DEPLOY_METHODS}\". Skipping this step."
 fi

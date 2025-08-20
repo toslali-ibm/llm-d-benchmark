@@ -25,7 +25,7 @@ function model_attribute {
   local model=$1
   local attribute=$2
 
-  local modelid=$(echo $model | cut -d: -f2)
+  local modelid=$(echo $model | cut -d: -f2 | $LLMDBENCH_CONTROL_SCMD -e "s^/^-^g" -e "s^\.^-^g")
   local modelid_label="$(echo -n $modelid | cut -d '/' -f 1 | cut -c1-8)-$(echo -n $modelid | sha256sum | awk '{print $1}' | cut -c1-8)-$(echo -n $modelid | cut -d '/' -f 2 | rev | cut -c1-8 | rev)"
 
   local modelcomponents=$(echo $model | cut -d '/' -f 2 |  tr '[:upper:]' '[:lower:]' | $LLMDBENCH_CONTROL_SCMD -e 's^qwen^qwen-^g' -e 's^-^\n^g')
@@ -358,6 +358,23 @@ function render_template {
   fi
 }
 export -f render_template
+
+function add_config {
+  local object_to_render=${1}
+  local -i num_spaces=${2:-0}
+  local label=${3:-}
+  
+  local spacec=$(printf '%*s' $num_spaces '')
+
+  if [[ -f ${object_to_render} ]]; then
+    if [[ -n $label ]]; then
+      echo "$label:"
+    else
+      echo ""
+    fi
+    echo "$(cat $object_to_render)" | $LLMDBENCH_CONTROL_SCMD -e "s^\\n^\\\\\n^g" | $LLMDBENCH_CONTROL_SCMD -e "s#^#$spacec#g"
+  fi
+}
 
 function add_command {
   local model_command=$1

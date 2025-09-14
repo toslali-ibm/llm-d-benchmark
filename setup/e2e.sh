@@ -203,7 +203,13 @@ generate_standup_parameter_scenarios $sweeptmpdir $LLMDBENCH_SCENARIO_FULL_PATH 
 announce "ℹ️ A list of tretaments for standup paramaters was generated at \"${sweeptmpdir}\""
 sleep 5
 
-rm -rf $LLMDBENCH_CONTROL_WORK_DIR
+if [[ -d $LLMDBENCH_CONTROL_WORK_DIR ]]; then
+  backup_suffix=$(date +"%Y-%m-%d_%H.%M.%S")
+  backup_target=$(echo $LLMDBENCH_CONTROL_WORK_DIR | $LLMDBENCH_CONTROL_SCMD 's^/$^^').$backup_suffix
+  announce "Backing up existing working directory \"$LLMDBENCH_CONTROL_WORK_DIR\" --> \"$backup_target\""
+  mv -f $LLMDBENCH_CONTROL_WORK_DIR $backup_target
+fi
+
 for scenario in $(ls $sweeptmpdir/setup/treatment_list/); do
   export LLMDBENCH_CLIOVERRIDE_DEPLOY_SCENARIO=$sweeptmpdir/setup/treatment_list/$scenario
   sid=$($LLMDBENCH_CONTROL_SCMD -e 's/[^[:alnum:]][^[:alnum:]]*/_/g' <<<"${scenario%.sh}")  # remove non alphanumeric and .sh

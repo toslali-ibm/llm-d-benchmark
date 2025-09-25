@@ -853,7 +853,6 @@ function create_harness_pod {
   # Sanitize the stack name to make it a valid k8s/OpenShift resource name
   local LLMDBENCH_HARNESS_SANITIZED_STACK_NAME=$(echo "${LLMDBENCH_HARNESS_STACK_NAME}" | $LLMDBENCH_CONTROL_SCMD 's|[/:]|-|g')
 
-
   cat <<EOF > $LLMDBENCH_CONTROL_WORK_DIR/setup/yamls/pod_benchmark-launcher.yaml
 apiVersion: v1
 kind: Pod
@@ -960,7 +959,6 @@ function get_model_name_from_pod {
     if [[ -z $has_protocol ]]; then
         local url="http://$url"
     fi
-
     # Check if the URL already contains a port number.
     # If not, append the default port provided.
     if ! echo "$url" | grep -q ':[0-9]'; then

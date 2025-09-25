@@ -24,10 +24,13 @@ SELECTED_PP_SIZE_KEY = "selected_pp_size"
 SELECTED_DP_SIZE_KEY = "selected_dp_size"
 SELECTED_ENABLE_EP_KEY = "selected_enable_ep"
 
+default_model_name = "deepseek-ai/DeepSeek-V3.1"
+default_model_name = "meta-llama/Llama-3.1-70B-Instruct"
+
 @dataclass
 class Scenario:
     """Scenario stores info about an user scenario in Streamlit"""
-    model_name: str = 'RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic'
+    model_name: str = default_model_name
     model_info: ModelInfo | None = None
     model_config: AutoConfig | None = None
     max_model_len: int = 1
@@ -46,7 +49,7 @@ class Scenario:
 
     def get_model_name(self) -> str:
         if not self.model_name:
-            self.model_name = 'RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic'
+            self.model_name = default_model_name
         return self.model_name
 
     def get_gpu_spec(self, gpu_specs_db: dict) -> dict:
@@ -67,7 +70,7 @@ class Scenario:
         """
         Resets inputs
         """
-        self.model_name = 'RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic'
+        self.model_name = default_model_name
         self.model_info = None
         self.model_config = None
         self.max_model_len = 1
@@ -81,6 +84,13 @@ class Scenario:
         self.pp_size = 1
         self.dp_size = 1
         self.enable_ep = False
+
+    def get_gpu_count(self) -> int:
+        """
+        Returns GPU count requirement as indicated by parallelism
+        """
+
+        return gpus_required(self.tp_size, self.pp_size, self.dp_size)
 
 def init_session_state():
     """

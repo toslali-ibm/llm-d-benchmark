@@ -30,9 +30,11 @@ default_model_name = "meta-llama/Llama-3.1-70B-Instruct"
 @dataclass
 class Scenario:
     """Scenario stores info about an user scenario in Streamlit"""
+    model_name: str = 'deepseek-ai/DeepSeek-V3.1'
     model_name: str = default_model_name
     model_info: ModelInfo | None = None
-    model_config: AutoConfig | None = None
+    model_config: AutoConfig | None = None      # Info about model
+    text_config: AutoConfig | None = None       # Info about the model like max positional embeddings can be nested inside text_config for certain architectures like MistralConfig
     max_model_len: int = 1
     concurrency: int = 1
 

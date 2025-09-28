@@ -156,10 +156,6 @@ def select_slo(benchmark_data):
 
     # TODO: what else?
 
-# def misc(benchmark_data):
-
-
-
 def get_pareto_front(df: pd.DataFrame) -> set[int]:
     """Get indices of rows on Pareto front.
 

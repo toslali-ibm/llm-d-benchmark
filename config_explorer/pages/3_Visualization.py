@@ -40,7 +40,7 @@ def parse_numeric_list(text: str, cast=int, fallback: List[int] | None = None) -
         return fallback or []
     return values
 
-def first_or_fallback(values: List[int], fallback: None | int) -> List[int]:
+def first_or_fallback(values: List[int], fallback: None | int=None) -> List[int]:
     """
     Return a single-value list: the first value if present, else [fallback].
     """
@@ -50,13 +50,31 @@ def first_or_fallback(values: List[int], fallback: None | int) -> List[int]:
         return []
     return [fallback]
 
+
+def filter_parallelism(df, tp: List[int], dp: List[int], pp: List[int]):
+
+    # If no PD
+    no_pd = df.loc[
+        (df["Is_PD"] == False) &
+        (df["DP"].isin(dp)) &
+        (df["PP"].isin(pp)) &
+        (df["TP"].isin(tp))
+    ]
+
+    # Prefill and decode parallelism cannot be more than the largest parallelism value in the list selected
+    yes_pd = df.loc[
+        (df["Is_PD"] == True) &
+        (df["P_DP"] + df['D_DP'] <= dp[-1]) &
+        (df["P_PP"] + df['D_PP'] <= pp[-1]) &
+        (df["P_TP"] + df['D_TP'] <= tp[-1])
+    ]
+
+    return pd.concat([no_pd, yes_pd])
+
 def sidebar():
-    """
-    Sidebar content
-    """
     with st.sidebar:
         st.button(
-            "Simulate performance results",
+            "Filter performance results",
             use_container_width=True,
             type='primary',
             key=SIMULATE_BUTTON_KEY,
@@ -77,33 +95,22 @@ def filter_numbers(numbers, threshold):
     return [num for num in numbers if num <= threshold]
 
 
-def check_input():
+def sidebar():
     """
-    Check all required input is there
+    Sidebar content
     """
-    scenario = st.session_state[util.USER_SCENARIO_KEY]
-    if not scenario.model_name or not scenario.gpu_name or not scenario.gpu_count_avail or not scenario.max_model_len:
-        return False
-    return True
-
-def display_capacity_planner_data():
-    """
-    Display info about data
-    """
-    user_scenario = st.session_state[util.USER_SCENARIO_KEY]
-    st.info(f"""Benchmarking results will be filtered based on the following inputs:
-
-- Model: `{user_scenario.model_name}`
-- GPU Type: `{user_scenario.gpu_name}`
-- GPU Available: `{user_scenario.get_gpu_count()}`
-- Max model length: `{user_scenario.max_model_len}` (max context length = `{max_context_len(user_scenario.model_config)}`)
-""")
+    with st.sidebar:
+        st.button(
+            "Filter performance results",
+            use_container_width=True,
+            type='primary',
+            key=SIMULATE_BUTTON_KEY,
+            )
 
 def table(benchmark_data):
     """
     Display table of benchmark data
     """
-    st.subheader("Optimal configurations")
 
     # Data cleaning
     df = benchmark_data[[
@@ -118,6 +125,11 @@ def table(benchmark_data):
         'Mean_E2EL_ms',
         'Thpt_per_GPU',
         'Thpt_per_User',
+        'block_size',
+        'long_prefill_token_threshold',
+        'enable_prefix_caching',
+        'max_num_batched_tokens',
+        'gpu_memory_utilization',
     ]].rename(columns={
         'Name': 'Replicas/Parallelism',
         'Concurrency': 'Batch Size',
@@ -130,6 +142,11 @@ def table(benchmark_data):
         'Mean_E2EL_ms': 'E2EL (ms)',
         'Thpt_per_GPU': 'Thpt/GPU (tok/s)',
         'Thpt_per_User': 'Thpt/User (tok/s)',
+        'block_size': "Block size",
+        'long_prefill_token_threshold': "Long prefill token threshold",
+        'enable_prefix_caching': "Enable prefix caching",
+        'max_num_batched_tokens': "Max num batched tokens",
+        'gpu_memory_utilization': "GPU memory utilization"
     })
 
     # Add a selection checkbox column
@@ -171,12 +188,24 @@ def table(benchmark_data):
             model_name = row_data['Model']
             dp = row_data['DP']
             tp = row_data['TP']
+            pp = row_data['PP']
+            block_size = row_data['block_size']
+            long_prefill_token_threshold = row_data['long_prefill_token_threshold']
+            enable_prefix_caching = row_data['enable_prefix_caching']
+            max_num_batched_tokens = row_data['max_num_batched_tokens']
+            gpu_memory_utilization = row_data['gpu_memory_utilization']
 
             col1, col2 = st.columns(2)
             col1.write("vLLM arguments")
             col1.code(f"""vllm serve {model_name} \\
 --data-parallel-size {str(dp)} \\
 --tensor-parallel-size {str(tp)} \\
+--pipeline-parallel-size {str(pp)} \\
+--block-size {str(block_size)} \\
+--long-prefill-token-threshold {str(long_prefill_token_threshold)} \\
+--enable-prefix-caching {str(enable_prefix_caching)} \\
+--max-num-batched-tokens {str(max_num_batched_tokens)} \\
+--gpu-memory-utilization {str(gpu_memory_utilization)}
 """
             )
 
@@ -221,13 +250,7 @@ def select_slo(benchmark_data):
                                                  step=1,
                                                  value=5000,
                                                  max_value=1000000,
-                                                 )
-
-    # TODO: what else?
-
-# def misc(benchmark_data):
-
-
+    )
 
 def get_pareto_front(df: pd.DataFrame) -> set[int]:
     """Get indices of rows on Pareto front.
@@ -249,17 +272,15 @@ def get_pareto_front(df: pd.DataFrame) -> set[int]:
                 pareto_set.remove(jj)
     return pareto_set
 
-def pareto_plots(runs_selected):
+def pareto_plots(tab: DeltaGenerator, runs_selected, ttft, itl, throughput):
     """
     Pareto plots
     """
 
-    user_scenario = st.session_state['scenario']
-
     runs_filtered = runs_selected[
-        (runs_selected.Mean_TTFT_ms <= user_scenario.ttft) &
-        (runs_selected.Mean_TPOT_ms <= user_scenario.tpot) &
-        (runs_selected.Total_Token_Throughput >= user_scenario.throughput)
+        (runs_selected.Mean_TTFT_ms <= ttft) &
+        (runs_selected.Mean_ITL_ms <= itl) &
+        (runs_selected.Total_Token_Throughput >= throughput)
     ]
     pareto_set = get_pareto_front(runs_selected)
 
@@ -303,9 +324,9 @@ def pareto_plots(runs_selected):
     ax.axis([0, None, 0, None])
     ax.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
 
-    _, col, _ = st.columns([.5, 1, .5])
-    with col:
-        st.pyplot(fig)
+    _, col, _ = tab.columns([.5, 1, .5])
+    # with col:
+    st.pyplot(fig, use_container_width=True)
     plt.show()
 
     return runs_pareto_front
@@ -320,6 +341,7 @@ def inputs(tab: DeltaGenerator ):
 
     # Model
     models = [
+        "meta-llama/Llama-3.1-70B-Instruct",
         "Qwen/Qwen2-7B",
         "Qwen/Qwen2-72B",
         "Qwen/Qwen2.5-14B",
@@ -332,10 +354,39 @@ def inputs(tab: DeltaGenerator ):
 
 
         if selected_model and selected_model != "":
-            # Fetch model info
-            model_info = get_model_info_from_hf(selected_model)
-            model_config = get_model_config_from_hf(selected_model)
-            model_gpu_memory_req = round(model_memory_req(model_info), 2)
+
+            # TODO: RM this!!!
+            hf_token = None
+
+            if selected_model and selected_model != "":
+                # Fetch model info
+                try:
+                    model_info = get_model_info_from_hf(selected_model)
+                except Exception as e:
+                    st.warning("Cannot access model information, see error below.")
+                    st.warning(e)
+                    return None
+
+                # Fetch model config
+                try:
+                    model_config = get_model_config_from_hf(selected_model, hf_token=hf_token)
+                except Exception as e:
+                    e_str = str(e)
+                    if "gated" in e_str:
+                        st.warning("This is a gated model, please submit a HF token to view information")
+                        hf_token = st.text_input("HF token")
+                        if hf_token:
+                            model_config = get_model_config_from_hf(selected_model, hf_token=hf_token)
+                    else:
+                        st.warning("Cannot access model config, see error below.")
+                        st.warning(e)
+                        return None
+
+                try:
+                    model_gpu_memory_req = round(model_memory_req(model_info), 2)
+                except Exception as e:
+                    st.warning(f"Cannot retrieve relevant information about the model, {e}. The Capacity Planner only has partial information and functionality.")
+                    return None
 
             # Display first precision
             col1, col2 = st.columns(2)
@@ -459,14 +510,14 @@ def inputs(tab: DeltaGenerator ):
                           disabled=disabled,
                           )
 
-                st.number_input("Input sequence length",
+                isl = st.number_input("Input sequence length",
                         step=1,
                         min_value=1,
                         value=scenario['input_len'],
                         disabled=disabled,
                             )
 
-                st.number_input("Output sequence length",
+                osl = st.number_input("Output sequence length",
                         step=1,
                         min_value=1,
                         value=scenario['output_len'],
@@ -481,38 +532,16 @@ def inputs(tab: DeltaGenerator ):
                         disabled=disabled,
                             )
 
-    # SLOs
-    with tab.container(border=True):
-        st.write("**Goals / SLOs**")
-        st.caption("Define the desire constraints to reach for your application.")
-
-        if selected_workload:
-            scenario = preset_scenarios[selected_workload]
-            disabled = selected_workload != "Custom"
-
-            latency_p50 = st.number_input("Latency p50 (ms)",
-                                          value=scenario['latency_p50'],
-                                          )
-            latency_p95 = st.number_input("Latency p95 (ms)",
-                                          value=scenario['latency_p90'],
-                                          )
-            throughput = st.number_input("Throughput (token/s)",
-                                         value=scenario['throughput'],
-                                         )
-            ttft = st.number_input("TTFT (ms)",
-                                   value=scenario['ttft'],
-                                   )
-            itl = st.number_input("ITL (ms)",
-                                  value=scenario['itl'],
-                                  )
-
     # Environment & Hardware Section
     with tab.container(border=True):
         st.write("**Environment & Hardware**")
 
         # GPU Configuration
         gpu_type = st.selectbox("Accelerator Type", db.gpu_specs.keys())
-        num_gpus = st.number_input("Total number of GPUs (this will filter out parallelism combinations that are invalid)", min_value=1)
+        num_gpus = st.number_input(
+            "Total number of GPUs (this will filter out parallelism combinations that are invalid)",
+            value=16,
+            min_value=1)
 
     # vLLM parameters
     with tab.container(border=True):
@@ -552,7 +581,7 @@ def inputs(tab: DeltaGenerator ):
             # If not sweeping, select a single value (first or fallback)
             gpu_memory_utilization = (
                 gpu_memory_utilization_all if sweep_gpu_mem
-                else first_or_fallback(gpu_memory_utilization_all, None)
+                else [90]
             )
 
         # -----------------------------
@@ -582,7 +611,7 @@ def inputs(tab: DeltaGenerator ):
                 block_size_selected = ACCEPTABLE_BLOCK_SIZES[:]
             block_size = (
                 block_size_selected if sweep_block_size
-                else first_or_fallback(block_size_selected, 16)
+                else [None]
             )
 
         # -----------------------------
@@ -612,7 +641,7 @@ def inputs(tab: DeltaGenerator ):
                 st.warning("Please provide at least one integer for Max Num Batched Tokens.")
             max_num_batched_tokens = (
                 max_num_batched_tokens_all if sweep_max_tokens
-                else first_or_fallback(max_num_batched_tokens_all, None)
+                else [None]
             )
 
         # -----------------------------
@@ -642,7 +671,7 @@ def inputs(tab: DeltaGenerator ):
                 st.warning("Please provide at least one integer for Long Prefill Token Threshold.")
             long_prefill_token_threshold = (
                 long_prefill_token_threshold_all if sweep_long_prefill
-                else first_or_fallback(long_prefill_token_threshold_all, None)
+                else [0]
             )
 
         # -----------------------------
@@ -671,10 +700,10 @@ def inputs(tab: DeltaGenerator ):
                 prefix_selected = prefix_options[:]
             enable_prefix_caching = (
                 prefix_selected if sweep_prefix_cache
-                else [True]  # default fixed value when not sweeping
+                else [True]
             )
 
-        # Parallelism section
+        # Parallelism selection
 
         st.divider()
         st.write("**Parallelism**")
@@ -693,9 +722,9 @@ def inputs(tab: DeltaGenerator ):
             default = find_possible_tp(model_config)
             default = filter_numbers(default, num_gpus)
 
-            tp_text = st.multiselect(
+            tp = st.multiselect(
                 "TP Values to sweep (comma/space separated)",
-                options=find_possible_tp(model_config),
+                options=default,
                 default=default,
                 key="tp_text",
                 disabled=not sweep_tp,
@@ -703,11 +732,8 @@ def inputs(tab: DeltaGenerator ):
                 help="Example: 1,2,4"
             )
 
-
-            tp_all = [v for v in parse_numeric_list(tp_text, cast=int, fallback=[1]) if v >= 1]
-            if sweep_tp and not tp_all:
-                st.warning("Please provide at least one integer ≥ 1 for Tensor Parallelism (tp).")
-            tp = tp_all if sweep_tp else first_or_fallback(tp_all, 1)
+            if not sweep_tp:
+                tp = [1]
 
         # -----------------------------
         # Pipeline Parallelism (pp)
@@ -722,23 +748,19 @@ def inputs(tab: DeltaGenerator ):
         with c2:
             default = [i for i in range(1, model_config.num_hidden_layers)]
             default = filter_numbers(default, num_gpus)
-            if not sweep_pp:
-                default = [1]
 
-            dp_text = st.multiselect(
+            pp = st.multiselect(
                 "DP Values to sweep (comma/separated)",
-                options=[i for i in range(1, model_config.num_hidden_layers)],
+                options=default,
                 default=default,
-                key="dp_text",
+                key="pp_text",
                 disabled=not sweep_pp,
                 label_visibility="collapsed",
                 help="Example: 1,2"
             )
-            pp_all = [v for v in parse_numeric_list(dp_text, cast=int, fallback=[1]) if v >= 1]
-            if sweep_pp and not pp_all:
-                st.warning("Please provide at least one integer ≥ 1 for Data Parallelism (dp). DP=1 will always be considered")
-            pp = pp_all if sweep_pp else first_or_fallback(pp_all, 1)
 
+            if not sweep_pp:
+                pp = [1]
         # -----------------------------
         # Data Parallelism (dp)
         # -----------------------------
@@ -751,24 +773,63 @@ def inputs(tab: DeltaGenerator ):
             )
         default_dp_text = "1, 2"
         with c2:
-            pp_text = st.text_input(
+            dp_text = st.text_input(
                 "Values to sweep (comma/space separated)",
                 value=default_dp_text,
-                key="pp_text",
+                key="dp_text",
                 disabled=not sweep_dp,
                 label_visibility="collapsed",
                 help="Example: 1,2"
             )
-            dp_all = [v for v in parse_numeric_list(pp_text, cast=int, fallback=[1]) if v >= 1]
+            dp_all = [v for v in parse_numeric_list(dp_text, cast=int, fallback=[1]) if v >= 1]
             if sweep_dp and not dp_all:
                 st.warning("Please provide at least one integer ≥ 1 for Pipeline Parallelism (pp).")
             dp = dp_all if sweep_dp else first_or_fallback(dp_all, 1)
+    # SLOs
+    with tab.container(border=True):
+        st.write("**Goals / SLOs**")
+        st.caption("Define the desire constraints to reach for your application.")
+
+        if selected_workload:
+            scenario = preset_scenarios[selected_workload]
+            disabled = selected_workload != "Custom"
+
+            latency_col1, latency_col2 = st.columns(2)
+            latency_p50 = latency_col1.number_input("E2E latency p50 (ms)",
+                                          value=scenario['latency_p50'],
+                                          min_value=0,
+                                          )
+            latency_p95 = latency_col2.number_input("E2E latency p95 (ms)",
+                                value=scenario['latency_p90'],
+                                min_value=0,
+                                )
+
+            ttft_col, itl_col = st.columns(2)
+            ttft = ttft_col.number_input("TTFT (ms)",
+                        value=scenario['ttft'],
+                        min_value=0,
+                        )
+            itl = itl_col.number_input("ITL (ms)",
+                        value=scenario['itl'],
+                        min_value=0,
+                        )
+
+            throughput = st.number_input("Throughput (token/s)",
+                                         value=scenario['throughput'],
+                                         min_value=1,
+                                         )
+
 
 
     data_to_return = {
+        "model": selected_model,
+        "gpu_type": gpu_type,
+        "num_gpus": num_gpus,
         "tp": tp,
         "dp": dp,
         "pp": pp,
+        "isl": isl,
+        "osl": osl,
         "gpu_memory_utilization": gpu_memory_utilization,
         "max_num_batched_tokens": max_num_batched_tokens,
         "block_size": block_size,
@@ -779,6 +840,14 @@ def inputs(tab: DeltaGenerator ):
         "throughput": throughput,
         "ttft": ttft,
         "itl": itl,
+        "throughput": throughput,
+
+        # If value to sweep
+        "sweep_gpu_memory_utilization": sweep_gpu_mem,
+        "sweep_block_size": sweep_block_size,
+        "sweep_max_num_batched_tokens": sweep_max_tokens,
+        "sweep_long_prefill_token_threshold": sweep_long_prefill,
+        "sweep_enable_prefix_caching": sweep_prefix_cache,
     }
 
     return data_to_return
@@ -786,139 +855,145 @@ def inputs(tab: DeltaGenerator ):
 def output(tab, user_input: dict):
     # if not st.session_state[SIMULATE_BUTTON_KEY]:
     #     tab.header("Output")
-    #     tab.warning("Run the simulation by clicking the button on the sidebar.")
+    #     tab.warning("Click the button on the sidebar to visualize benchmark sweeps.")
     #     return None
 
-    # with st.spinner("Running the BLIS performance estimator takes only a few seconds.", show_time=False):
+    # with st.spinner("Filtering results...", show_time=False):
     #     time.sleep(2)
 
-    if st.session_state[SIMULATE_BUTTON_KEY]:
-        tp_selected = user_input['tp']
-        dp_selected = user_input['dp']
-        pp_selected = user_input['pp']
-        gpu_memory_utilization = user_input['gpu_memory_utilization']
-        max_num_batched_tokens = user_input['max_num_batched_tokens']
-        block_size = user_input['block_size']
-        long_prefill_token_threshold = user_input['long_prefill_token_threshold']
-        enable_prefix_caching = user_input['enable_prefix_caching']
-        latency_p50 = user_input['latency_p50']
-        latency_p95 = user_input['latency_p95']
-        throughput = user_input['throughput']
-        ttft = user_input['ttft']
-        itl = user_input['itl']
+    st.header("Outputs")
+
+    model_name = user_input['model']
+    gpu_type = user_input['gpu_type']
+    num_gpus = user_input['num_gpus']
+    tp_selected = user_input['tp']
+    dp_selected = user_input['dp']
+    pp_selected = user_input['pp']
+    isl = user_input['isl']
+    osl = user_input['osl']
+    gpu_memory_utilization = user_input['gpu_memory_utilization']
+    max_num_batched_tokens = user_input['max_num_batched_tokens']
+    block_size = user_input['block_size']
+    long_prefill_token_threshold = user_input['long_prefill_token_threshold']
+    enable_prefix_caching = user_input['enable_prefix_caching']
+    latency_p50 = user_input['latency_p50']
+    latency_p95 = user_input['latency_p95']
+    throughput = user_input['throughput']
+    ttft = user_input['ttft']
+    itl = user_input['itl']
+    throughput = user_input['throughput']
+
+    # Plot configurations and get DataFrame with Pareto front configs.
+    # Filter benchmarking data
+    df = db.read_benchmark_data()
+    benchmark_data = df.loc[
+        (df["Model"] == model_name) &
+        (df["GPU"] == gpu_type) &
+        (df["Num_GPUs"] == num_gpus) &
+        (df["ISL"] <= isl ) &
+        (df["OSL"] <= osl )
+    ]
+
+    if benchmark_data.empty:
+        st.warning("The inputs selected returned no results. Try loosening your SLO requirements.")
+        return None
+
+    df1 = filter_parallelism(
+        benchmark_data,
+        tp_selected,
+        dp_selected,
+        pp_selected,
+    )
+
+    # Combo graph
+    sweep_combos = list(itertools.product(
+        gpu_memory_utilization,
+        block_size,
+        max_num_batched_tokens,
+        long_prefill_token_threshold,
+        enable_prefix_caching
+    ))
+
+    np.random.seed(42)
+
+    new_columns = {
+        "gpu_memory_utilization": gpu_memory_utilization,
+        "max_num_batched_tokens": max_num_batched_tokens,
+        "block_size": block_size,
+        "long_prefill_token_threshold": long_prefill_token_threshold,
+        "enable_prefix_caching": enable_prefix_caching,
+    }
+
+    for col, options in new_columns.items():
+        df1[col] = np.random.choice(options, size=len(df1))
+
+    # score = fraction of conditions met
+    df1["score"] = (
+        (df1["Total_Token_Throughput"] >= throughput) &
+        (df1["Mean_TTFT_ms"] <= ttft) &
+        (df1["Mean_ITL_ms"] <= itl)
+    ).astype(int)
 
 
-        sweep_combos = list(itertools.product(
-            gpu_memory_utilization,
-            block_size,
-            max_num_batched_tokens,
-            long_prefill_token_threshold,
-            enable_prefix_caching
-        ))
+    # # Build dimension list dynamically - some may not be selected
+    agg_dimensions = ["TP", "PP", "DP"]
+    disagg_dimensions = ["P_TP", "P_PP", "P_DP", "D_TP", "D_PP", "D_DP"]
+    if user_input["sweep_gpu_memory_utilization"]:
+        agg_dimensions.append("gpu_memory_utilization")
+        disagg_dimensions.append("gpu_memory_utilization")
+    if user_input["sweep_block_size"]:
+        agg_dimensions.append("block_size")
+        disagg_dimensions.append("block_size")
+    if user_input["sweep_max_num_batched_tokens"]:
+        agg_dimensions.append("max_num_batched_tokens")
+        disagg_dimensions.append("max_num_batched_tokens")
+    if user_input["sweep_long_prefill_token_threshold"]:
+        agg_dimensions.append("long_prefill_token_threshold")
+        disagg_dimensions.append("long_prefill_token_threshold")
+    if user_input["sweep_enable_prefix_caching"]:
+        agg_dimensions.append("enable_prefix_caching")
+        disagg_dimensions.append("enable_prefix_caching")
 
-        data = []
-        np.random.seed(42)
-        for tp in tp_selected:
-            for dp in dp_selected:
-                for (gpu_mem, bs, max_bt, lpref, prefix) in sweep_combos:
-                    row = {
-                        "TP": tp,
-                        "DP": dp,
-                        "gpu_memory_utilization": gpu_memory_utilization,
-                        "block_size": block_size,
-                        "max_num_batched_tokens": max_num_batched_tokens,
-                        "long_prefill_token_threshold": long_prefill_token_threshold,
-                        "enable_prefix_caching": enable_prefix_caching,
-                    }
 
-                    # # Add sweeps if they enabled
-                    # if sweep_gpu_mem: row["gpu_memory_utilization"] = gpu_mem
-                    # if sweep_block_size: row["block_size"] = bs
-                    # if sweep_max_tokens: row["max_num_batched_tokens"] = max_bt
-                    # if sweep_long_prefill: row["long_prefill_token_threshold"] = lpref
-                    # if sweep_prefix_cache: row["enable_prefix_caching"] = prefix
+    st.subheader("Aggregate setting")
+    aggregate = df1.loc[(df["Is_PD"] == False)]
+    agg_count = (aggregate["score"] == 1).sum()
+    st.info(f"There are {agg_count} aggregate configurations that meet SLO requirements.")
+    fig = px.parallel_categories(
+        aggregate,
+        dimensions=agg_dimensions,
+        color="score",
+        color_continuous_scale=[(0, "red"), (1, "green")],
+        labels={col: col for col in df.columns},
+        range_color=[0,1],
+    )
+    tab.plotly_chart(fig, use_container_width=True)
 
-                    row["gpu_memory_utilization"] = gpu_mem
-                    row["block_size"] = bs
-                    row["max_num_batched_tokens"] = max_bt
-                    row["long_prefill_token_threshold"] = lpref
-                    row["enable_prefix_caching"] = prefix
+    st.subheader("P/D disaggregate setting")
+    disaggregate = df1.loc[(df["Is_PD"] == True)]
+    disagg_count = (disaggregate["score"] == 1).sum()
+    st.info(f"There are {disagg_count} disaggregate configurations that meet SLO requirements.")
+    fig = px.parallel_categories(
+        disaggregate,
+        dimensions=disagg_dimensions,
+        color="score",
+        color_continuous_scale=[(0, "red"), (1, "green")],
+        labels={col: col for col in df.columns},
+        range_color=[0,1],
+    )
+    tab.plotly_chart(fig, use_container_width=True)
 
-                    # BLIS call
-                    lat50 = np.random.normal(latency_p50 * 1.0, 8)
-                    lat95 = np.random.normal(latency_p95 * 1.0, 15)
-                    thr   = np.random.normal(throughput * 1.0, 20)
-                    ttft_val = np.random.normal(ttft * 1.0, 15)
-                    itl_val  = np.random.normal(itl * 1.0, 8)
-
-                    row["latency_p50"] = round(lat50, 2)
-                    row["latency_p95"] = round(lat95, 2)
-                    row["throughput"] = round(thr, 2)
-                    row["ttft"] = round(ttft_val, 2)
-                    row["itl"] = round(itl_val, 2)
-
-                    meets_slo = int(
-                        (lat50 <= latency_p50) and
-                        (lat95 <= latency_p95) and
-                        (thr >= throughput) and
-                        (ttft_val <= ttft) and
-                        (itl_val <= itl)
-                    )
-                    row["Score"] = meets_slo
-                    data.append(row)
-
-        df = pd.DataFrame(data)
-
-        # Build dimension list dynamically - some may not be selected
-        dimensions = ["TP", "DP"]
-        # if sweep_gpu_mem: dimensions.append("gpu_memory_utilization")
-        # if sweep_block_size: dimensions.append("block_size")
-        # if sweep_max_tokens: dimensions.append("max_num_batched_tokens")
-        # if sweep_long_prefill: dimensions.append("long_prefill_token_threshold")
-        # if sweep_prefix_cache: dimensions.append("enable_prefix_caching")
-
-        dimensions.append("gpu_memory_utilization")
-        dimensions.append("block_size")
-        dimensions.append("max_num_batched_tokens")
-        dimensions.append("long_prefill_token_threshold")
-        dimensions.append("enable_prefix_caching")
-
-        fig = px.parallel_categories(
-            df,
-            dimensions=dimensions,
-            color="Score",
-            color_continuous_scale=[(0, "red"), (1, "green")],
-            labels={col: col for col in df.columns}
-        )
-
-        tab.plotly_chart(fig, use_container_width=True)
-
-        passed = df["Score"].sum()
-        total = len(df)
-        tab.info(f"Results: {passed} configs met all SLOs out of {total} tested.")
-
-        passed_df = df[df["Score"] == 1]
-
-        if not passed_df.empty:
-            tab.write("### Successful Configurations")
-
-            slo_cols = ["latency_p50", "latency_p95", "throughput", "ttft", "itl"]
-            other_cols = [c for c in passed_df.columns if c not in slo_cols + ["Score"]]
-            display_df = passed_df[slo_cols + other_cols]
-
-            tab.dataframe(display_df, use_container_width=True, hide_index=True)
-        else:
-            tab.warning("No configurations met all SLOs.")
-
+    st.subheader("Optimal configurations")
+    pareto_front = pareto_plots(tab, df1, ttft, itl, throughput)
+    table(pareto_front)
 
 if __name__ == "__main__":
-    st.title("Performance Estimation")
-    st.caption("For unseen configurations, suggest optimal configuration by estimating performance using the BLIS simulator.")
+    st.set_page_config(layout="wide")
+    st.title("Benchmarking data visualization")
+    st.caption("Optimal configurations for `llm-d`, including inference scheduler configuration and vLLM arguments.")
 
     util.init_session_state()
 
-    tab1, tab2 = st.tabs(["Inputs", "BLIS Estimator Results"])
-
     sidebar()
-    user_inputs = inputs(tab1)
-    output(tab2, user_inputs)
+    user_inputs = inputs(st)
+    output(st, user_inputs)

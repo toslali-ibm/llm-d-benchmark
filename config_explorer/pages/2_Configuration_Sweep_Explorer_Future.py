@@ -138,9 +138,9 @@ def table(tab: DeltaGenerator, benchmark_data):
         'Thpt_per_User',
         # 'block_size',
         # 'long_prefill_token_threshold',
-        # 'enable_prefix_caching',
-        # # 'max_num_batched_tokens',
-        # 'gpu_memory_utilization',
+        'enable_prefix_caching',
+        # 'max_num_batched_tokens',
+        'gpu_memory_utilization',
     ]].rename(columns={
         'Name': 'Replicas/Parallelism',
         "Is_PD": "PD enabled",
@@ -156,9 +156,9 @@ def table(tab: DeltaGenerator, benchmark_data):
         'Thpt_per_User': 'Thpt/User (tok/s)',
         # 'block_size': "Block size",
         # 'long_prefill_token_threshold': "Long prefill token threshold",
-        # 'enable_prefix_caching': "Enable prefix caching",
-        # # 'max_num_batched_tokens': "Max num batched tokens",
-        # 'gpu_memory_utilization': "GPU memory utilization"
+        'enable_prefix_caching': "Enable prefix caching",
+        # 'max_num_batched_tokens': "Max num batched tokens",
+        'gpu_memory_utilization': "GPU memory utilization"
     })
 
     # Add a selection checkbox column
@@ -206,9 +206,9 @@ def table(tab: DeltaGenerator, benchmark_data):
 
             # block_size = row_data['block_size']
             # long_prefill_token_threshold = row_data['long_prefill_token_threshold']
-            # enable_prefix_caching = row_data['enable_prefix_caching']
+            enable_prefix_caching = row_data['enable_prefix_caching']
             # max_num_batched_tokens = row_data['max_num_batched_tokens']
-            # gpu_memory_utilization = row_data['gpu_memory_utilization']
+            gpu_memory_utilization = row_data['gpu_memory_utilization']
 
             if not pd_enabled:
                 col1.write("vLLM arguments (aggregate)")
@@ -219,8 +219,8 @@ def table(tab: DeltaGenerator, benchmark_data):
 --data-parallel-size {str(dp)} \\
 --tensor-parallel-size {str(tp)} \\
 --pipeline-parallel-size {str(pp)} \\
---enable-prefix-caching \\
---gpu-memory-utilization 0.9
+--enable-prefix-caching {str(enable_prefix_caching)} \\
+--gpu-memory-utilization {str(gpu_memory_utilization)}
 """
             )
 
@@ -234,8 +234,8 @@ def table(tab: DeltaGenerator, benchmark_data):
 --data-parallel-size {str(p_dp)} \\
 --tensor-parallel-size {str(p_tp)} \\
 --pipeline-parallel-size {str(p_pp)} \\
---enable-prefix-caching \\
---gpu-memory-utilization 0.9
+--enable-prefix-caching {str(enable_prefix_caching)} \\
+--gpu-memory-utilization {str(gpu_memory_utilization)}
 """
             )
 
@@ -247,8 +247,8 @@ def table(tab: DeltaGenerator, benchmark_data):
 --data-parallel-size {str(d_dp)} \\
 --tensor-parallel-size {str(d_tp)} \\
 --pipeline-parallel-size {str(d_pp)} \\
---enable-prefix-caching \\
---gpu-memory-utilization 0.9
+--enable-prefix-caching {str(enable_prefix_caching)} \\
+--gpu-memory-utilization {str(gpu_memory_utilization)}
 """
             )
 
@@ -918,7 +918,6 @@ def output(tab, user_input: dict, original_benchmark_data):
         (df["OSL"] == osl ) &
         (df['Concurrency'].isin(concurrencies))
     ]
-    benchmark_data_copy = benchmark_data.copy()
 
     if benchmark_data.empty:
         tab.warning("The inputs selected returned no results. Try loosening your SLO requirements.")
@@ -1015,7 +1014,7 @@ def output(tab, user_input: dict, original_benchmark_data):
     if disagg_count > 0: tab.plotly_chart(fig, use_container_width=True)
 
     tab.subheader("Optimal configurations")
-    pareto_front = pareto_plots(tab, benchmark_data_copy, ttft, itl, throughput)
+    pareto_front = pareto_plots(tab, df1, ttft, itl, throughput)
 
     tab.info(f"Of the {agg_count + disagg_count} that meet SLO requirements, {len(pareto_front)} are optimal because they maximize tokens/s/User or tokens/s/GPU.")
     table(tab, pareto_front)

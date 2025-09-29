@@ -327,7 +327,7 @@ def pareto_plots(tab: DeltaGenerator, runs_selected, ttft, itl, throughput):
         (runs_selected.Mean_ITL_ms <= itl) &
         (runs_selected.Total_Token_Throughput >= throughput)
     ]
-    pareto_set = get_pareto_front(runs_selected)
+    pareto_set = get_pareto_front(runs_filtered)
 
     # Runs that meet scenario selection, but fail SLOs
     runs_fails_slo = runs_selected[~runs_selected.index.isin(runs_filtered.index.tolist())]
@@ -1038,7 +1038,7 @@ if __name__ == "__main__":
 
     benchmark_data = db.read_benchmark_data()
     col1, col2 = st.columns([0.3, 0.7], gap="large")
-    col1_container = col1.container(height=750, border=False)
-    col2_container = col2.container(height=750, border=False)
+    col1_container = col1.container(height=1000, border=False)
+    col2_container = col2.container(height=1000, border=False)
     user_inputs = inputs(col1_container, benchmark_data)
     output(col2_container, user_inputs, benchmark_data)

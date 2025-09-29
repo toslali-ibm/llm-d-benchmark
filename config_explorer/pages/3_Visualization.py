@@ -379,7 +379,7 @@ def inputs(tab: DeltaGenerator ):
     """
 
     tab.header("Inputs")
-    tab.caption("Inputs to the BLIS simulator. Note that this page provides the regression model for estimating a selective set of models. Training a new model is straightforward.")
+    tab.caption("Inputs to the config sweep explorer.")
 
     # Model
     models = [
@@ -508,10 +508,10 @@ def inputs(tab: DeltaGenerator ):
                 },
             "Custom": {
                 "dataset": "Synthetic",
-                "request_rate": 1,
-                "input_len": 1,
-                "output_len": 1,
-                "prefix_hit_ratio": 1,
+                "request_rate": 10,
+                "input_len": 1000,
+                "output_len": 1000,
+                "prefix_hit_ratio": 5,
                 "latency_p50": 10,
                 "latency_p90": 100,
                 "throughput": 100,
@@ -553,14 +553,14 @@ def inputs(tab: DeltaGenerator ):
                           )
 
                 isl = st.number_input("Input sequence length",
-                        step=1,
+                        step=100,
                         min_value=1,
                         value=scenario['input_len'],
                         disabled=disabled,
                             )
 
                 osl = st.number_input("Output sequence length",
-                        step=1,
+                        step=100,
                         min_value=1,
                         value=scenario['output_len'],
                         disabled=disabled,
@@ -1009,6 +1009,7 @@ def output(tab, user_input: dict):
         labels={col: col for col in df.columns},
         range_color=[0,1],
     )
+
     tab.plotly_chart(fig, use_container_width=True)
 
     st.subheader("P/D disaggregate setting")

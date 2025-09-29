@@ -115,6 +115,7 @@ def table(benchmark_data):
     # Data cleaning
     df = benchmark_data[[
         'Name',
+        "Is_PD",
         'Concurrency',
         'Request_Throughput',
         'Output_Token_Throughput',
@@ -132,6 +133,7 @@ def table(benchmark_data):
         'gpu_memory_utilization',
     ]].rename(columns={
         'Name': 'Replicas/Parallelism',
+        "Is_PD": "PD enabled",
         'Concurrency': 'Batch Size',
         'Request_Throughput': 'Request Thpt',
         'Output_Token_Throughput': 'Output Token Thpt',
@@ -184,20 +186,24 @@ def table(benchmark_data):
 
         # Iterate over selected rows and fetch data from the original df
         for idx in selected_indices:
+            col1, col2 = st.columns(2)
+
             row_data = benchmark_data.loc[idx]  # Drop checkbox col for clean data
             model_name = row_data['Model']
-            dp = row_data['DP']
-            tp = row_data['TP']
-            pp = row_data['PP']
+            pd_enabled = row_data['Is_PD']
+
             block_size = row_data['block_size']
             long_prefill_token_threshold = row_data['long_prefill_token_threshold']
             enable_prefix_caching = row_data['enable_prefix_caching']
             max_num_batched_tokens = row_data['max_num_batched_tokens']
             gpu_memory_utilization = row_data['gpu_memory_utilization']
 
-            col1, col2 = st.columns(2)
-            col1.write("vLLM arguments")
-            col1.code(f"""vllm serve {model_name} \\
+            if not pd_enabled:
+                col1.write("vLLM arguments (aggregate)")
+                dp = row_data['DP']
+                tp = row_data['TP']
+                pp = row_data['PP']
+                col1.code(f"""vllm serve {model_name} \\
 --data-parallel-size {str(dp)} \\
 --tensor-parallel-size {str(tp)} \\
 --pipeline-parallel-size {str(pp)} \\
@@ -208,6 +214,42 @@ def table(benchmark_data):
 --gpu-memory-utilization {str(gpu_memory_utilization)}
 """
             )
+
+            else:
+                col1.write("vLLM arguments (disaggregate)")
+                p_dp = row_data['P_DP']
+                p_tp = row_data['P_TP']
+                p_pp = row_data['P_PP']
+                col1.write("*Prefill arguments*")
+                col1.code(f"""vllm serve {model_name} \\
+--data-parallel-size {str(p_dp)} \\
+--tensor-parallel-size {str(p_tp)} \\
+--pipeline-parallel-size {str(p_pp)} \\
+--block-size {str(block_size)} \\
+--long-prefill-token-threshold {str(long_prefill_token_threshold)} \\
+--enable-prefix-caching {str(enable_prefix_caching)} \\
+--max-num-batched-tokens {str(max_num_batched_tokens)} \\
+--gpu-memory-utilization {str(gpu_memory_utilization)}
+"""
+            )
+
+                d_dp = row_data['D_DP']
+                d_tp = row_data['D_TP']
+                d_pp = row_data['D_PP']
+                col1.write("*Decode arguments*")
+                col1.code(f"""vllm serve {model_name} \\
+--data-parallel-size {str(d_dp)} \\
+--tensor-parallel-size {str(d_tp)} \\
+--pipeline-parallel-size {str(d_pp)} \\
+--block-size {str(block_size)} \\
+--long-prefill-token-threshold {str(long_prefill_token_threshold)} \\
+--enable-prefix-caching {str(enable_prefix_caching)} \\
+--max-num-batched-tokens {str(max_num_batched_tokens)} \\
+--gpu-memory-utilization {str(gpu_memory_utilization)}
+"""
+            )
+
+
 
             col2.write("Inference Scheduler config")
             col2.code("""apiVersion: inference.networking.x-k8s.io/v1alpha1

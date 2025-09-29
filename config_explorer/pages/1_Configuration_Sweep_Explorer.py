@@ -107,7 +107,7 @@ def sidebar():
             key=SIMULATE_BUTTON_KEY,
             )
 
-def table(benchmark_data):
+def table(tab: DeltaGenerator, benchmark_data):
     """
     Display table of benchmark data
     """
@@ -166,7 +166,7 @@ def table(benchmark_data):
             column_config[col] = st.column_config.TextColumn(col, disabled=True)
 
     # Render the data editor
-    edited_df = st.data_editor(
+    edited_df = tab.data_editor(
         df,
         column_config=column_config,
         use_container_width=True,
@@ -182,11 +182,11 @@ def table(benchmark_data):
         # Get the indices of selected rows
         selected_indices = selected_rows_df.index.tolist()
 
-        st.markdown("##### llm-d configuration:")
+        tab.markdown("##### llm-d configuration:")
 
         # Iterate over selected rows and fetch data from the original df
         for idx in selected_indices:
-            col1, col2 = st.columns(2)
+            col1, col2 = tab.columns(2)
 
             row_data = benchmark_data.loc[idx]  # Drop checkbox col for clean data
             model_name = row_data['Model']
@@ -272,9 +272,9 @@ schedulingProfiles:
     weight: 50
 """, language='yaml')
 
-            st.write("---")
+            tab.write("---")
     else:
-        st.info("Select one or more rows to see details below.")
+        tab.info("Select one or more rows to see details below.")
 
 def select_slo(benchmark_data):
     """
@@ -368,7 +368,7 @@ def pareto_plots(tab: DeltaGenerator, runs_selected, ttft, itl, throughput):
 
     _, col, _ = tab.columns([.5, 1, .5])
     # with col:
-    st.pyplot(fig, use_container_width=True)
+    tab.pyplot(fig, use_container_width=True)
     plt.show()
 
     return runs_pareto_front
@@ -378,8 +378,8 @@ def inputs(tab: DeltaGenerator ):
     Inputs to the BLIS simulator
     """
 
-    tab.header("Inputs")
-    tab.caption("Inputs to the config sweep explorer.")
+    tab.subheader("Sweep input selection")
+    tab.caption("Select initial filters on benchmarking data such as model and workload characteristics.")
 
     # Model
     models = [
@@ -895,15 +895,19 @@ def inputs(tab: DeltaGenerator ):
     return data_to_return
 
 def output(tab, user_input: dict):
-    # if not st.session_state[SIMULATE_BUTTON_KEY]:
-    #     tab.header("Output")
-    #     tab.warning("Click the button on the sidebar to visualize benchmark sweeps.")
-    #     return None
+    """
+    Visualize output
+    """
+    tab.subheader("Sweep exploration")
+    tab.caption("Visualize performance results that meet input selection.")
 
-    # with st.spinner("Filtering results...", show_time=False):
-    #     time.sleep(2)
-
-    st.header("Outputs")
+    # Button to initiate visualization
+    if not st.session_state[SIMULATE_BUTTON_KEY]:
+        tab.info("Click the button on the sidebar to visualize benchmark sweeps.")
+        return None
+    with tab:
+        with st.spinner("Filtering results...", show_time=False):
+            time.sleep(2)
 
     model_name = user_input['model']
     gpu_type = user_input['gpu_type']
@@ -937,7 +941,7 @@ def output(tab, user_input: dict):
     ]
 
     if benchmark_data.empty:
-        st.warning("The inputs selected returned no results. Try loosening your SLO requirements.")
+        tab.warning("The inputs selected returned no results. Try loosening your SLO requirements.")
         return None
 
     df1 = filter_parallelism(
@@ -997,10 +1001,10 @@ def output(tab, user_input: dict):
         disagg_dimensions.append("enable_prefix_caching")
 
 
-    st.subheader("Aggregate setting")
+    tab.subheader("Aggregate setting")
     aggregate = df1.loc[(df["Is_PD"] == False)]
     agg_count = (aggregate["score"] == 1).sum()
-    st.info(f"There are {agg_count} aggregate configurations that meet SLO requirements.")
+    tab.info(f"There are {agg_count} aggregate configurations that meet SLO requirements.")
     fig = px.parallel_categories(
         aggregate,
         dimensions=agg_dimensions,
@@ -1012,10 +1016,10 @@ def output(tab, user_input: dict):
 
     tab.plotly_chart(fig, use_container_width=True)
 
-    st.subheader("P/D disaggregate setting")
+    tab.subheader("P/D disaggregate setting")
     disaggregate = df1.loc[(df["Is_PD"] == True)]
     disagg_count = (disaggregate["score"] == 1).sum()
-    st.info(f"There are {disagg_count} disaggregate configurations that meet SLO requirements.")
+    tab.info(f"There are {disagg_count} disaggregate configurations that meet SLO requirements.")
     fig = px.parallel_categories(
         disaggregate,
         dimensions=disagg_dimensions,
@@ -1026,17 +1030,30 @@ def output(tab, user_input: dict):
     )
     tab.plotly_chart(fig, use_container_width=True)
 
-    st.subheader("Optimal configurations")
+    tab.subheader("Optimal configurations")
     pareto_front = pareto_plots(tab, df1, ttft, itl, throughput)
-    table(pareto_front)
+
+    table(tab, pareto_front)
 
 if __name__ == "__main__":
-    st.set_page_config(layout="wide")
-    st.title("Benchmarking data visualization")
-    st.caption("Optimal configurations for `llm-d`, including inference scheduler configuration and vLLM arguments.")
+    # Set up streamlit config
+    st.set_page_config(page_title="Configuration Explorer",
+                       page_icon=None,
+                       layout="wide",
+                       initial_sidebar_state="expanded",
+                       menu_items=None)
+    st.title("Configuration Explorer")
+    st.caption("This tool helps you find the most cost-effective, optimal configuration for serving models on llm-d based on hardware specification, workload characteristics, and SLO requirements.")
 
     util.init_session_state()
 
+    # Display Sweep Explorer headings
+    st.header("Configuration Sweep Explorer")
+    st.caption("Explore, exmaine, and visualize existing benchmarking data for optimal `llm-d` configurations.")
+
     sidebar()
-    user_inputs = inputs(st)
-    output(st, user_inputs)
+    col1, col2 = st.columns(2, gap="large")
+    col1_container = col1.container(height=750, border=False)
+    col2_container = col2.container(height=750, border=False)
+    user_inputs = inputs(col1_container)
+    output(col2_container, user_inputs)

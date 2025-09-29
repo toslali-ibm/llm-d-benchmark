@@ -269,11 +269,60 @@ Higher max model length means fewer concurrent requests can be served, \
                 dp=user_scenario.dp_size,
             )
 
+            per_request_kv_cache = kv_cache_req(
+                model_info,
+                model_config,
+                user_scenario.max_model_len,
+            )
+
         except Exception:
             col2.warning("Model does not have safetensors data available, cannot estimate KV cache memory requirement.")
             return None
 
-        col2.info(f"Assuming the worst case scenario, such that every request contains `--max-model-len` tokens, the maximum concurrent requests that can be processed is {max_concurrent_requests_num}.")
+        col2.info(f"Assuming the worst case scenario, such that every request contains `--max-model-len` tokens, each request takes {util.pretty_round(per_request_kv_cache)} GB for KV cache, which means the maximum concurrent requests that can be processed is {max_concurrent_requests_num}.")
+
+        with st.expander("See how KV cache is calculated below"):
+            num_layers = model_config.num_hidden_layers
+            precision_in_bytes = precision_to_byte(inference_dtype(model_config))
+            st.write(f"""First, the per-token memory requirement is estimated given the following inputs:
+- KV cache data type: `{inference_dtype(model_config)}` = {precision_to_byte(inference_dtype(model_config))} bytes in memory
+- Hidden layers: {model_config.num_hidden_layers}
+""")
+
+            if is_mla(user_scenario.model_name):
+                # TODO: incomplete for mla
+                st.write(f"""This model uses MLA attention. The relevant parameters are:
+- KV lora rank: {model_config.kv_lora_rank}
+- QK rope head dimension: {model_config.qk_rope_head_dim}
+
+Per-token memory = layers x (kv_lora_rank + qk_rope_head_dim) * precison_in_bytes
+                 = `{model_config.num_hidden_layers} x ({model_config.kv_lora_rank} + {model_config.qk_rope_head_dim}) * {precision_to_byte(inference_dtype(model_config))}`
+""")
+            else:
+                head_dimension = getattr(model_config, "head_dim", model_config.hidden_size / model_config.num_attention_heads)
+                kv_heads = model_config.num_key_value_heads
+                per_token_memory = num_layers * 2 * head_dimension * kv_heads * precision_in_bytes
+
+                st.write(f"""This model uses MHA/GQA  attention. The relevant parameters are:
+- Head dimension: {getattr(model_config, "head_dim", model_config.hidden_size / model_config.num_attention_heads)}
+- KV heads: {model_config.num_key_value_heads}""")
+
+                st.code(f"""
+Per-token memory = layers x 2 (two for K and V matrices) x head_dimension x kv_heads x precision_in_bytes
+                 = {num_layers} x 2 x {head_dimension} x {kv_heads} x {precision_in_bytes}
+                 = {per_token_memory} bytes
+""")
+            kv_cache_size = per_token_memory * user_scenario.max_model_len * user_scenario.concurrency
+            kv_cache_size_gb =  kv_cache_size / (1024 ** 3)
+            st.write("Finally, the per-token-memory is then multiplied by the context length (max-model-len) and batch size (concurrency).")
+            st.code(f"""
+KV cache per request = per-token-memory x context-len x batch-size
+                     = {per_token_memory} x {user_scenario.max_model_len} x {user_scenario.concurrency}
+                     = {kv_cache_size} bytes
+                     = {kv_cache_size} / (1024 ** 3)
+                     = {kv_cache_size_gb} GB
+
+""")
 
 def hardware_specification():
     """
@@ -501,7 +550,7 @@ if __name__ == '__main__':
     util.init_session_state()
 
     # Display Capacity Planner headings
-    st.subheader("Capacity Planner")
+    st.header("Capacity Planner")
     st.caption("Determine how many GPUs you need to fit your model and how many requests can be served at once depending on request patterns.")
 
     # Get user inputs and show outputs

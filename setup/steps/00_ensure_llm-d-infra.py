@@ -31,7 +31,7 @@ except ModuleNotFoundError as e:
 
 # Import config_explorer module
 try:
-    from config_explorer.capacity_planner import gpus_required, get_model_info_from_hf, get_model_config_from_hf, get_text_config, find_possible_tp, max_context_len, available_gpu_memory, model_total_params, model_memory_req, allocatable_kv_cache_memory, kv_cache_req, max_concurrent_requests
+    from config_explorer.capacity_planner import KVCacheDetail, gpus_required, get_model_info_from_hf, get_model_config_from_hf, get_text_config, find_possible_tp, max_context_len, available_gpu_memory, model_total_params, model_memory_req, allocatable_kv_cache_memory, kv_cache_req, max_concurrent_requests
 except ModuleNotFoundError as e:
     print(f"❌ ERROR: Failed to import config_explorer module: {e}")
     print(f"\nTry: pip install -r {workspace_root / 'config_explorer' / 'requirements.txt'}")
@@ -240,8 +240,8 @@ def validate_vllm_params(param: ValidationParam, ignore_if_failed: bool, type: s
 
                 announce(f"ℹ️ Allocatable memory for KV cache {available_kv_cache} GB")
 
-                per_request_kv_cache_req = kv_cache_req(model_info, model_config, max_model_len)
-                announce(f"ℹ️ KV cache memory for a request taking --max-model-len={max_model_len} requires {per_request_kv_cache_req} GB of memory")
+                kv_details = KVCacheDetail(model_info, model_config, max_model_len, batch_size=1)
+                announce(f"ℹ️ KV cache memory for a request taking --max-model-len={max_model_len} requires {kv_details.per_request_kv_cache_gb} GB of memory")
 
                 total_concurrent_reqs = max_concurrent_requests(
                     model_info, model_config, max_model_len,
@@ -310,10 +310,10 @@ def validate_modelservice_vllm_params(ev: dict, ignore_if_failed: bool):
     prefill_params = get_validation_param(ev, type=PREFILL)
     decode_params = get_validation_param(ev, type=DECODE)
 
-    announce("Validating prefill vLLM arguments...")
+    announce(f"Validating prefill vLLM arguments for {prefill_params.models} ...")
     validate_vllm_params(prefill_params, ignore_if_failed, type=PREFILL)
 
-    announce("Validating decode vLLM arguments...")
+    announce(f"Validating decode vLLM arguments for {decode_params.models} ...")
     validate_vllm_params(decode_params, ignore_if_failed, type=DECODE)
 
 def main():

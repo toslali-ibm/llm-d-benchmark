@@ -433,40 +433,6 @@ def inputs(tab: DeltaGenerator, data):
                     st.warning(f"Cannot retrieve relevant information about the model, {e}. The Capacity Planner only has partial information and functionality.")
                     return None
 
-            # # Display first precision
-            # col1, col2 = st.columns(2)
-
-            # col1.info(f"Size of model in memory: ~{model_gpu_memory_req} GB")
-            # with col2.expander("See how model size is calculated below"):
-            #     st.write("""Below shows how model memory is estimated. The number of parameters and precision are fetched from Hugging Face. Common data types include `BF16` (floating point 16-bit) and `F8_E4M3` (floating point 8-bit, 4 for exponents and 3 for mantissa). The total is then summed.""")
-
-            #     data_types = []
-            #     bytes_list = []
-            #     params = []
-            #     memory_req = []
-
-            #     for d_type, param in model_info.safetensors.parameters.items():
-            #         data_types.append(d_type)
-            #         params.append(param)
-
-            #         try:
-            #             bytes_list.append(precision_to_byte(d_type))
-            #         except Exception as e:
-            #             st.warning(e)
-            #             pass
-
-            #         memory_req.append(parameter_memory_req(param, d_type))
-
-            #     data = {
-            #         "Data type": data_types,
-            #         "Size in bytes": bytes_list,
-            #         "Number of parameters": params,
-            #         "Memory in GB (params x bytes)": memory_req,
-            #     }
-            #     st.dataframe(data, hide_index=True)
-
-            #     st.write("In addition, vLLM [profiles memory](https://github.com/vllm-project/vllm/blob/dcf2f3ec067711ff69e5ab7478fca6ffb4f11daf/vllm/worker/worker.py#L229) by doing a forward pass with `--max-model-len` with dummy data to estimate the non-torch and torch activation peak memory consumption. This means the estimation of the model memory is actually an underestimation. Estimating intermediate memory footprint is currently work in progress.")
-
     # Scenario
     with tab.container(border=True):
         st.write("**Workload Profiles**")
@@ -509,18 +475,6 @@ def inputs(tab: DeltaGenerator, data):
                 "ttft": 20,
                 "itl": 5,
                 },
-            # "Custom": {
-            #     "dataset": "Synthetic",
-            #     "request_rate": 10,
-            #     "input_len": 1000,
-            #     "output_len": 1000,
-            #     "prefix_hit_ratio": 5,
-            #     "latency_p50": 10,
-            #     "latency_p90": 100,
-            #     "throughput": 100,
-            #     "ttft": 200,
-            #     "itl": 50,
-            #     }
         }
 
         datasets = [
@@ -554,7 +508,7 @@ def inputs(tab: DeltaGenerator, data):
 - Output length: {osl}
 """)
 
-        concurrency_options = benchmark_data["Concurrency"].unique()
+        concurrency_options = [1,5,10]# benchmark_data["Concurrency"].unique()
         concurrency_options.sort()
         concurrency_selected = st.multiselect("Select concurrency (request rate)",
                                               options=concurrency_options,
@@ -566,10 +520,11 @@ def inputs(tab: DeltaGenerator, data):
         st.write("**Environment & Hardware**")
 
         # GPU Configuration
-        gpu_type = st.selectbox("Accelerator Type", db.gpu_specs.keys())
+        accelerators = ["H100"]
+        gpu_type = st.selectbox("Accelerator Type", accelerators) # db.gpu_specs.keys()
         num_gpus = st.number_input(
             "Total number of GPUs (this will filter out parallelism combinations that are invalid)",
-            value=16,
+            value=1,
             min_value=1)
 
     # vLLM parameters
@@ -583,7 +538,6 @@ def inputs(tab: DeltaGenerator, data):
         # -----------------------------
         # GPU Memory Utilization (%)
         # -----------------------------
-        c1, c2 = st.columns(COL_SPEC, vertical_alignment="center")
         sweep_gpu_mem = st.checkbox(
             "GPU Memory Utilization (%)",
             value=True,
@@ -613,121 +567,62 @@ def inputs(tab: DeltaGenerator, data):
             else default
         )
 
-        # # -----------------------------
-        # # Block Size
-        # # -----------------------------
-        # c1, c2 = st.columns(COL_SPEC, vertical_alignment="center")
-        # with c1:
-        #     sweep_block_size = st.checkbox(
-        #         "Block Size",
-        #         value=True,
-        #         help="Select one or more vLLM-acceptable block sizes (tokens per KV block)."
-        #     )
-        # ACCEPTABLE_BLOCK_SIZES = [8, 16, 32]  # Adjust if your vLLM build supports others
-        # default_block_sizes = ACCEPTABLE_BLOCK_SIZES[:]  # all selected by default
-        # with c2:
-        #     block_size_selected = st.multiselect(
-        #         "Block sizes",
-        #         options=ACCEPTABLE_BLOCK_SIZES,
-        #         default=default_block_sizes,
-        #         key="block_sizes",
-        #         disabled=not sweep_block_size,
-        #         label_visibility="collapsed"
-        #     )
-        #     # If the user somehow clears selection while sweeping, restore defaults
-        #     if sweep_block_size and not block_size_selected:
-        #         st.info("No block sizes selected. Disable this parameter to sweep if that is what you intended, otherwise, use all acceptable block sizes by default.")
-        #         block_size_selected = ACCEPTABLE_BLOCK_SIZES[:]
-        #     block_size = (
-        #         block_size_selected if sweep_block_size
-        #         else [None]
-        #     )
-
-        # # -----------------------------
-        # # Max Num Batched Tokens
-        # # -----------------------------
-        # c1, c2 = st.columns(COL_SPEC, vertical_alignment="center")
-        # with c1:
-        #     sweep_max_tokens = st.checkbox(
-        #         "Max Num Batched Tokens",
-        #         value=True,
-        #         help="Comma/space/semicolon-separated integers."
-        #     )
-        # default_max_tokens_text = "256, 512, 1024, 2048"
-        # with c2:
-        #     max_tokens_text = st.text_input(
-        #         "Values to sweep (comma/space separated)",
-        #         value=default_max_tokens_text,
-        #         key="max_tokens_text",
-        #         disabled=not sweep_max_tokens,
-        #         label_visibility="collapsed",
-        #         help="Example: 256,512,1024,2048"
-        #     )
-        #     max_num_batched_tokens_all = parse_numeric_list(
-        #         max_tokens_text, cast=int, fallback=[256, 512, 1024, 2048]
-        #     )
-        #     if sweep_max_tokens and not max_num_batched_tokens_all:
-        #         st.warning("Please provide at least one integer for Max Num Batched Tokens.")
-        #     max_num_batched_tokens = (
-        #         max_num_batched_tokens_all if sweep_max_tokens
-        #         else [None]
-        #     )
-
-        # # -----------------------------
-        # # Long Prefill Token Threshold
-        # # -----------------------------
-        # c1, c2 = st.columns(COL_SPEC, vertical_alignment="center")
-        # with c1:
-        #     sweep_long_prefill = st.checkbox(
-        #         "Long Prefill Token Threshold",
-        #         value=True,
-        #         help="Comma/space/semicolon-separated integers."
-        #     )
-        # default_long_prefill_text = "256, 512, 1024, 2048"
-        # with c2:
-        #     long_prefill_text = st.text_input(
-        #         "Values to sweep (comma/space separated)",
-        #         value=default_long_prefill_text,
-        #         key="long_prefill_text",
-        #         disabled=not sweep_long_prefill,
-        #         label_visibility="collapsed",
-        #         help="Example: 256,512,1024,2048"
-        #     )
-        #     long_prefill_token_threshold_all = parse_numeric_list(
-        #         long_prefill_text, cast=int, fallback=[256, 512, 1024, 2048]
-        #     )
-        #     if sweep_long_prefill and not long_prefill_token_threshold_all:
-        #         st.warning("Please provide at least one integer for Long Prefill Token Threshold.")
-        #     long_prefill_token_threshold = (
-        #         long_prefill_token_threshold_all if sweep_long_prefill
-        #         else [0]
-        #     )
-
         # -----------------------------
-        # Enable Prefix Caching
+        # Block Size
         # -----------------------------
-        sweep_prefix_cache = st.checkbox(
-                "Enable Prefix Caching",
-                value=True,
-                help="Sweep over True/False to evaluate effect of prefix caching."
-            )
-
-        # Two multiselect values True/False, both selected by default
-        prefix_options = [True, False]
-        prefix_selected = st.multiselect(
-            "Enable Prefix Caching values",
-            options=prefix_options,
-            default=[True],  # both selected by default
-            key="prefix_caching_values",
-            disabled=not sweep_prefix_cache,
-            label_visibility="collapsed"
+        sweep_block = st.checkbox(
+            "Block Size",
+            value=True,
+            help="Comma/space/semicolon-separated integers (e.g., 16, 32)."
         )
-        if sweep_prefix_cache and not prefix_selected:
-            st.info("No selection made. Using both True and False by default.")
-            prefix_selected = prefix_options[:]
-        enable_prefix_caching = (
-            prefix_selected if sweep_prefix_cache
-            else [True]
+        default = [16]
+        block_size_text = st.multiselect(
+            "Values to sweep (comma/space separated)",
+            options=default,
+            default=default,
+            key="block_size_text",
+            disabled=not sweep_block,
+            label_visibility="collapsed",
+        )
+        block_size_all = parse_numeric_list(
+            block_size_text, cast=int, fallback=default,
+        )
+       
+        if sweep_block and not block_size_all:
+            st.warning("Please provide at least one block size.")
+        # If not sweeping, select a single value (first or fallback)
+        block_size = (
+            block_size_all if sweep_block
+            else default
+        )
+
+        # -----------------------------
+        # Long Prefill Token Threshold
+        # -----------------------------
+         
+        sweep_long_prefill = st.checkbox(
+            "Long Prefill Token Threshold",
+            value=True,
+            help="Comma/space/semicolon-separated integers."
+        )
+        default_long_prefill_text = "256, 2048"
+       
+        long_prefill_text = st.text_input(
+            "Values to sweep (comma/space separated)",
+            value=default_long_prefill_text,
+            key="long_prefill_text",
+            disabled=not sweep_long_prefill,
+            label_visibility="collapsed",
+            help="Example: 256,512,1024,2048"
+        )
+        long_prefill_token_threshold_all = parse_numeric_list(
+            long_prefill_text, cast=int, fallback=[256, 512, 1024, 2048]
+        )
+        if sweep_long_prefill and not long_prefill_token_threshold_all:
+            st.warning("Please provide at least one integer for Long Prefill Token Threshold.")
+        long_prefill_token_threshold = (
+            long_prefill_token_threshold_all if sweep_long_prefill
+            else [0]
         )
 
         # Parallelism selection
@@ -858,7 +753,7 @@ def inputs(tab: DeltaGenerator, data):
         # "max_num_batched_tokens": max_num_batched_tokens,
         # "block_size": block_size,
         # "long_prefill_token_threshold": long_prefill_token_threshold,
-        "enable_prefix_caching": enable_prefix_caching,
+        # "enable_prefix_caching": enable_prefix_caching,
         "latency_p50": latency_p50,
         "latency_p95": latency_p95,
         "throughput": throughput,
@@ -883,158 +778,7 @@ def output(tab, user_input: dict, original_benchmark_data):
     tab.subheader("Sweep exploration")
     tab.caption("Visualize performance results that meet input selection.")
 
-    with tab.expander("See all data (without filter)"):
-        st.dataframe(original_benchmark_data)
-
-    model_name = user_input['model']
-    gpu_type = user_input['gpu_type']
-    num_gpus = user_input['num_gpus']
-    tp_selected = user_input['tp']
-    dp_selected = user_input['dp']
-    pp_selected = user_input['pp']
-    isl = user_input['isl']
-    osl = user_input['osl']
-    concurrencies = user_input['concurrency']
-    gpu_memory_utilization = user_input['gpu_memory_utilization']
-    # max_num_batched_tokens = user_input['max_num_batched_tokens']
-    # block_size = user_input['block_size']
-    # long_prefill_token_threshold = user_input['long_prefill_token_threshold']
-    enable_prefix_caching = user_input['enable_prefix_caching']
-    latency_p50 = user_input['latency_p50']
-    latency_p95 = user_input['latency_p95']
-    throughput = user_input['throughput']
-    ttft = user_input['ttft']
-    itl = user_input['itl']
-    throughput = user_input['throughput']
-
-    # Plot configurations and get DataFrame with Pareto front configs.
-    # Filter benchmarking data
-    df = db.read_benchmark_data()
-    benchmark_data = df.loc[
-        (df["Model"] == model_name) &
-        (df["GPU"] == gpu_type) &
-        (df["Num_GPUs"] <= num_gpus) &
-        (df["ISL"] == isl ) &
-        (df["OSL"] == osl ) &
-        (df['Concurrency'].isin(concurrencies))
-    ]
-    benchmark_data_copy = benchmark_data.copy()
-
-    if benchmark_data.empty:
-        tab.warning("The inputs selected returned no results. Try loosening your SLO requirements or use the experimental feature: BLIS estimator.")
-        st.caption("The BLIS estimator will estimate performance (TTFT, ITL, latency, etc.) from the selected input without the need for GPUs.")
-        if tab.button("Run BLIS estimator"):
-            with tab:
-                with st.spinner("Estimating performance... should take just a few seconds..."):
-                    time.sleep(3)
-
-                # Totally mocked
-                df['Model'] = "Qwen/Qwen2-7B"
-                benchmark_data = df.loc[
-                (df["Model"] == model_name) &
-                (df["GPU"] == gpu_type) &
-                (df["Num_GPUs"] <= num_gpus) &
-                (df["ISL"] == isl ) &
-                (df["OSL"] == osl ) &
-                (df['Concurrency'].isin(concurrencies))
-                ]
-                benchmark_data_copy = benchmark_data.copy()
-
-    df1 = filter_parallelism(
-        benchmark_data,
-        tp_selected,
-        dp_selected,
-        pp_selected,
-    )
-
-    # # Combo graph
-    # sweep_combos = list(itertools.product(
-    #     gpu_memory_utilization,
-    #     block_size,
-    #     max_num_batched_tokens,
-    #     long_prefill_token_threshold,
-    #     enable_prefix_caching
-    # ))
-
-    # np.random.seed(42)
-
-    # new_columns = {
-    #     "gpu_memory_utilization": gpu_memory_utilization,
-    #     # "max_num_batched_tokens": max_num_batched_tokens,
-    #     # "block_size": block_size,
-    #     # "long_prefill_token_threshold": long_prefill_token_threshold,
-    #     "enable_prefix_caching": enable_prefix_caching,
-    # }
-
-    # New cols
-    df1['gpu_memory_utilization'] = gpu_memory_utilization[0]
-    df1['enable_prefix_caching'] = enable_prefix_caching[0]
-
-    # for col, options in new_columns.items():
-    #     df1[col] = np.random.choice(options, size=len(df1))
-
-    # meets_slo = fraction of conditions met
-    df1["meets_slo"] = (
-        (df1["Total_Token_Throughput"] >= throughput) &
-        (df1["Mean_TTFT_ms"] <= ttft) &
-        (df1["Mean_ITL_ms"] <= itl)
-    ).astype(int)
-
-
-    # # Build dimension list dynamically - some may not be selected
-    agg_dimensions = ["Replicas", "TP", "PP", "DP", "gpu_memory_utilization", "enable_prefix_caching"]
-    disagg_dimensions = ["P_Replicas", "P_TP", "P_PP", "P_DP", "D_Replicas", "D_TP", "D_PP", "D_DP", "gpu_memory_utilization", "enable_prefix_caching"]
-    # if user_input["sweep_gpu_memory_utilization"]:
-    #     agg_dimensions.append("gpu_memory_utilization")
-    #     disagg_dimensions.append("gpu_memory_utilization")
-    # if user_input["sweep_block_size"]:
-    #     agg_dimensions.append("block_size")
-    #     disagg_dimensions.append("block_size")
-    # if user_input["sweep_max_num_batched_tokens"]:
-    #     agg_dimensions.append("max_num_batched_tokens")
-    #     disagg_dimensions.append("max_num_batched_tokens")
-    # if user_input["sweep_long_prefill_token_threshold"]:
-    #     agg_dimensions.append("long_prefill_token_threshold")
-    #     disagg_dimensions.append("long_prefill_token_threshold")
-    # if user_input["sweep_enable_prefix_caching"]:
-    #     agg_dimensions.append("enable_prefix_caching")
-    #     disagg_dimensions.append("enable_prefix_caching")
-
-
-    tab.subheader("Aggregate setting")
-    aggregate = df1.loc[(df["Is_PD"] == False)]
-    agg_count = (aggregate["meets_slo"] == 1).sum()
-    tab.info(f"There are {agg_count} aggregate configurations that meet SLO requirements.")
-    fig = px.parallel_categories(
-        aggregate,
-        dimensions=agg_dimensions,
-        color="meets_slo",
-        color_continuous_scale=[(0, "red"), (1, "green")],
-        labels={col: col for col in df.columns},
-        range_color=[0,1],
-    )
-
-    if agg_count > 0: tab.plotly_chart(fig, use_container_width=True)
-
-    tab.subheader("P/D disaggregate setting")
-    disaggregate = df1.loc[(df["Is_PD"] == True)]
-    disagg_count = (disaggregate["meets_slo"] == 1).sum()
-    tab.info(f"There are {disagg_count} disaggregate configurations that meet SLO requirements.")
-    fig = px.parallel_categories(
-        disaggregate,
-        dimensions=disagg_dimensions,
-        color="meets_slo",
-        color_continuous_scale=[(0, "red"), (1, "green")],
-        labels={col: col for col in df.columns},
-        range_color=[0,1],
-    )
-    if disagg_count > 0: tab.plotly_chart(fig, use_container_width=True)
-
-    tab.subheader("Optimal configurations")
-    pareto_front = pareto_plots(tab, benchmark_data_copy, ttft, itl, throughput)
-
-    tab.info(f"Of the {agg_count + disagg_count} that meet SLO requirements, {len(pareto_front)} are optimal because they maximize tokens/s/User or tokens/s/GPU.")
-    table(tab, pareto_front)
+    
 
 if __name__ == "__main__":
     # Set up streamlit config

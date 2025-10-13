@@ -489,7 +489,7 @@ def inputs(tab: DeltaGenerator):
             "Summarization": {
                 "dataset": "shareGPT",
                 "request_rate": 25,
-                "input_len": 10000,
+                "input_len": 5000,
                 "output_len": 1000,
                 "prefix_hit_ratio": 30,
                 "latency_p50": 40,
@@ -503,7 +503,7 @@ def inputs(tab: DeltaGenerator):
                 "request_rate": 5,
                 "input_len": 2048,
                 "output_len": 256,
-                "prefix_hit_ratio": 5,
+                "prefix_hit_ratio": 30,
                 "latency_p50": 42,
                 "latency_p90": 80,
                 "throughput": 5,
@@ -548,6 +548,10 @@ def inputs(tab: DeltaGenerator):
         throughput = info['throughput']
         ttft = info['ttft']
         itl = info['itl']
+
+        input_mean = info["input_len"]
+        output_mean = info["output_len"]
+        prefix_hit_ratio = info["prefix_hit_ratio"]
 
         st.write(f"""
 - Dataset: {dataset}
@@ -790,6 +794,9 @@ def inputs(tab: DeltaGenerator):
         "pp": pp,
         "isl": isl,
         "osl": osl,
+        "prefix_hit_ratio": prefix_hit_ratio,
+        "input_mean": input_mean,
+        "output_mean": output_mean,
         'concurrency': concurrency_selected,
         "gpu_memory_utilization": gpu_memory_utilization,
         # "max_num_batched_tokens": max_num_batched_tokens,
@@ -828,11 +835,12 @@ def output(tab, user_input: dict):
         try:
             # map CONFIG
             CONFIG["MODEL"] = user_input["model"]
-            CONFIG["PREFIX_HIT_RATIOS"] = [0.3, 0.6]
-            CONFIG["SPECS"] = ['LL', 'LH']
+            CONFIG["PREFIX_HIT_RATIOS"] = [user_input["prefix_hit_ratio"]/100]
+            CONFIG["INFERENCE_SPECS"]["INPUT_LEN_MEAN"] = user_input["input_mean"]
+            CONFIG["INFERENCE_SPECS"]["OUTPUT_LEN_MEAN"] = user_input["output_mean"]
+            CONFIG["REQUEST_RATES"] = user_input["concurrency"] # [x / 100 for x in user_input["concurrency"]]
             CONFIG["GPU_MEM_UTIL"] = user_input["gpu_memory_utilization"][0]/100 #0.9
             CONFIG["BLOCK_SIZE"] = user_input["block_size"][0]  #16
-            CONFIG["MAX_NUM_BATCHED_TOKENS"] = 2048
             CONFIG["CHUNK_SIZES"] = user_input["long_prefill_token_threshold"] # [256, 2048]
             CONFIG["GPU_TYPE"] = user_input["gpu_type"] # "NVIDIA-H100-80GB-HBM3"
 
@@ -840,7 +848,7 @@ def output(tab, user_input: dict):
 
 
             
-            results_file_path = os.path.join(SIMULATION_BASE_DIR, "results/sweep_params/simulator_results.csv")
+            results_file_path = os.path.join(SIMULATION_BASE_DIR, "results/sweep_params/simulator_test_results.csv")
             # Remove old simulator results if they exist 
             if os.path.exists(results_file_path):
                 try:
@@ -848,16 +856,18 @@ def output(tab, user_input: dict):
                 except Exception as e:
                     None
 
+            print("Running simulator")
             subprocess.run(
                 ["python", os.path.join(SIMULATION_BASE_DIR, "request_rate_sweep.py")],
                 check=True,
                 env={**os.environ, "SIMULATION_BASE_DIR": SIMULATION_BASE_DIR},
             )
             
+            print("reading results")
             df = pd.read_csv(results_file_path)
             
             # Display the CSV file as a table
-            tab.subheader("Simulation Results")
+            tab.subheader("All Simulation Results")
             tab.dataframe(df)  
 
             # Add the 'Score' column based on the SLO conditions
@@ -876,11 +886,11 @@ def output(tab, user_input: dict):
             meets_slo_df = df[df["Score"] == 1]
 
             # Display the filtered table (rows that meet the SLOs)
-            tab.subheader("Rows that Meet SLOs")
+            tab.subheader("Configurations that Meet SLOs")
             tab.dataframe(meets_slo_df)  # Show the filtered DataFrame
 
             # Define the dimensions for the Plotly parallel categories chart
-            dimensions = ["request_rate", "spec", "prefix_ratio", "chunk_size"]
+            dimensions = ["request_rate", "prefix_ratio", "chunk_size"]
             
             # Plotly Parallel Categories Chart
             fig = px.parallel_categories(
@@ -892,14 +902,14 @@ def output(tab, user_input: dict):
             )
             
             # Display the Plotly chart
-            tab.subheader("Parallel Categories Chart: SLOs")
+            tab.subheader("Configuration Chart for SLOs")
             tab.plotly_chart(fig, use_container_width=True)
             
             status_placeholder.success("✅ Simulation completed successfully!")
         except subprocess.CalledProcessError as e:
             status_placeholder.error(f"Simulation failed with error:\n\n{e}")
-        except FileNotFoundError:
-            status_placeholder.error("Could not find `request_rate_sweep.py`. Check SIMULATION_BASE_DIR.")
+        except FileNotFoundError as e:
+            status_placeholder.error("Could not find file. Check SIMULATION_BASE_DIR.", e)
 
 
 if __name__ == "__main__":

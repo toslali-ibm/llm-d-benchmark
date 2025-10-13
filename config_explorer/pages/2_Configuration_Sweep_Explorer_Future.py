@@ -487,25 +487,25 @@ def inputs(tab: DeltaGenerator):
 
         preset_scenarios = {
             "Summarization": {
-                "dataset": "shareGPT",
+                "dataset": "Random Summarization",
                 "request_rate": 25,
                 "input_len": 5000,
                 "output_len": 1000,
                 "prefix_hit_ratio": 30,
-                "latency_p50": 40,
-                "latency_p90": 68,
-                "throughput": 5,
+                "latency_p50": 12000,
+                "latency_p99": 15000,
+                "throughput": 2,
                 "ttft": 2000,
                 "itl": 50,
                 },
             "Chatbot": {
-                "dataset": "Summary Dataset",
+                "dataset": "Chatbot Dataset",
                 "request_rate": 5,
                 "input_len": 2048,
                 "output_len": 256,
                 "prefix_hit_ratio": 30,
-                "latency_p50": 42,
-                "latency_p90": 80,
+                "latency_p50": 2500,
+                "latency_p99": 3000,
                 "throughput": 5,
                 "ttft": 2000,
                 "itl": 500,
@@ -513,11 +513,11 @@ def inputs(tab: DeltaGenerator):
             "Classification": {
                 "dataset": "Text Dataset",
                 "request_rate": 5,
-                "input_len": 3096,
-                "output_len": 32,
-                "prefix_hit_ratio": 5,
+                "input_len": 256,
+                "output_len": 5,
+                "prefix_hit_ratio": 30,
                 "latency_p50": 50,
-                "latency_p90": 68,
+                "latency_p99": 68,
                 "throughput": 5,
                 "ttft": 20,
                 "itl": 5,
@@ -525,8 +525,8 @@ def inputs(tab: DeltaGenerator):
         }
 
         datasets = [
-            "shareGPT",
-            "Summary Dataset",
+            "Random Summarization",
+            "Chatbot Dataset",
             "Text Dataset",
             "Synthetic",
             "Dataset 5",
@@ -544,10 +544,10 @@ def inputs(tab: DeltaGenerator):
         osl = info['output_len']
         prefix_hit_ratio = info['prefix_hit_ratio']
         latency_p50 = info['latency_p50']
-        latency_p90 = info['latency_p90']
+        latency_p99 = info['latency_p99']
         throughput = info['throughput']
-        ttft = info['ttft']
-        itl = info['itl']
+        # ttft = info['ttft']
+        # itl = info['itl']
 
         input_mean = info["input_len"]
         output_mean = info["output_len"]
@@ -557,6 +557,7 @@ def inputs(tab: DeltaGenerator):
 - Dataset: {dataset}
 - Input length: {isl}
 - Output length: {osl}
+- Prefix Hit Ratio: {prefix_hit_ratio}%
 """)
 
         concurrency_options = [1,5,10]# benchmark_data["Concurrency"].unique()
@@ -761,26 +762,26 @@ def inputs(tab: DeltaGenerator):
             disabled = selected_workload != "Custom"
 
             latency_col1, latency_col2 = st.columns(2)
-            latency_p50 = latency_col1.number_input("E2E latency p50 (ms)",
+            latency_p50 = latency_col1.number_input("E2E Median latency (ms)",
                                           value=scenario['latency_p50'],
                                           min_value=0,
                                           )
-            latency_p95 = latency_col2.number_input("E2E latency p95 (ms)",
-                                value=scenario['latency_p90'],
+            latency_p99 = latency_col2.number_input("E2E latency p99 (ms)",
+                                value=scenario['latency_p99'],
                                 min_value=0,
                                 )
 
-            ttft_col, itl_col = st.columns(2)
-            ttft = ttft_col.number_input("TTFT (ms)",
-                        value=scenario['ttft'],
-                        min_value=0,
-                        )
-            itl = itl_col.number_input("ITL (ms)",
-                        value=scenario['itl'],
-                        min_value=0,
-                        )
+            # ttft_col, itl_col = st.columns(2)
+            # ttft = ttft_col.number_input("TTFT (ms)",
+            #             value=scenario['ttft'],
+            #             min_value=0,
+            #             )
+            # itl = itl_col.number_input("ITL (ms)",
+            #             value=scenario['itl'],
+            #             min_value=0,
+            #             )
 
-            throughput = st.number_input("Throughput (token/s)",
+            throughput = st.number_input("Throughput (req/s)",
                                          value=scenario['throughput'],
                                          min_value=1,
                                          )
@@ -804,10 +805,10 @@ def inputs(tab: DeltaGenerator):
         "long_prefill_token_threshold": long_prefill_token_threshold,
         # "enable_prefix_caching": enable_prefix_caching,
         "latency_p50": latency_p50,
-        "latency_p95": latency_p95,
+        "latency_p99": latency_p99,
         "throughput": throughput,
-        "ttft": ttft,
-        "itl": itl,
+        # "ttft": ttft,
+        # "itl": itl,
         "throughput": throughput,
         # If value to sweep
         # "sweep_gpu_memory_utilization": sweep_gpu_mem,
@@ -872,12 +873,12 @@ def output(tab, user_input: dict):
 
             # Add the 'Score' column based on the SLO conditions
             latency_p50 = user_input["latency_p50"]
-            latency_p95 = user_input["latency_p95"]
+            latency_p99 = user_input["latency_p99"]
             throughput = user_input["throughput"]
             df["Score"] = df.apply(
                 lambda row: int(
-                    (row['Mean E2E(ms)'] <= latency_p50) and
-                    (row['P99 E2E(ms)'] <= latency_p95) and
+                    (row['Median E2E(ms)'] <= latency_p50) and
+                    (row['P99 E2E(ms)'] <= latency_p99) and
                     (row['Request throughput (req/s)'] >= throughput)
                 ), axis=1
             )

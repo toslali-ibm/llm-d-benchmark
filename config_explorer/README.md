@@ -52,6 +52,14 @@ pip install -r config_explorer/requirements-streamlit.txt
 .venv/bin/streamlit run config_explorer/Capacity_Planner.py
 ```
 
+### BLIS
+```
+git clone -b events https://github.com/toslali-ibm/inference-sim.git
+go build -o simulation_worker main.go
+export SIMULATION_BASE_DIR=/path/to/inference-sim
+```
+- then boot config explorer, and navigate the third page (`.venv/bin/streamlit run config_explorer/Capacity_Planner.py`)
+
 ### Library
 Users may import the functions like the following to use in their code after `pip install git+https://github.com/llm-d/llm-d-benchmark.git`.
 

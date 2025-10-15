@@ -15,21 +15,33 @@ import util
 from src.config_explorer.capacity_planner import *
 import os
 import importlib.util
+import os, runpy, importlib.util
+from pathlib import Path
 
 SIMULATE_BUTTON_KEY = 'simulate_button_key'
 
+# 1. Locate where the package is installed
+spec = importlib.util.find_spec("request_rate_sweep")
+SIMULATION_BASE_DIR = Path(spec.origin).parent
 
 
-SIMULATION_BASE_DIR = os.getenv("SIMULATION_BASE_DIR")
-if not SIMULATION_BASE_DIR:
-    raise EnvironmentError(
-        "Environment variable SIMULATION_BASE_DIR is not set. "
-        "Please define it, e.g.:\n"
-        "   export SIMULATION_BASE_DIR=/path/to/your/project"
-    )
+CONSTANTS_PATH = SIMULATION_BASE_DIR / "experiment_constants.py"
 
-# Path to experiment_constants.py                        
-CONSTANTS_PATH = os.path.join(SIMULATION_BASE_DIR, "experiment_constants.py")
+# 2. Set the env variable expected by the script
+os.environ["SIMULATION_BASE_DIR"] = str(SIMULATION_BASE_DIR)
+
+
+
+# SIMULATION_BASE_DIR = os.getenv("SIMULATION_BASE_DIR")
+# if not SIMULATION_BASE_DIR:
+#     raise EnvironmentError(
+#         "Environment variable SIMULATION_BASE_DIR is not set. "
+#         "Please define it, e.g.:\n"
+#         "   export SIMULATION_BASE_DIR=/path/to/your/project"
+#     )
+
+# # Path to experiment_constants.py                        
+# CONSTANTS_PATH = os.path.join(SIMULATION_BASE_DIR, "experiment_constants.py")
 
 def load_constants_as_dict():
     """Dynamically import experiment_constants.py and return its uppercase variables as a dict."""
@@ -54,8 +66,6 @@ def write_constants_from_dict(config_dict):
                 f.write(f'{key} = "{value}"\n')
             else:
                 f.write(f"{key} = {repr(value)}\n")
-
-
 
 # --- Helpers ---
 def parse_numeric_list(text: str, cast=int, fallback: List[int] | None = None) -> List[int]:
@@ -847,8 +857,6 @@ def output(tab, user_input: dict):
 
             write_constants_from_dict(CONFIG)
 
-
-            
             results_file_path = os.path.join(SIMULATION_BASE_DIR, "results/sweep_params/simulator_test_results.csv")
             # Remove old simulator results if they exist 
             if os.path.exists(results_file_path):
@@ -858,11 +866,12 @@ def output(tab, user_input: dict):
                     None
 
             print("Running simulator")
-            subprocess.run(
-                ["python", os.path.join(SIMULATION_BASE_DIR, "request_rate_sweep.py")],
-                check=True,
-                env={**os.environ, "SIMULATION_BASE_DIR": SIMULATION_BASE_DIR},
-            )
+            # subprocess.run(
+            #     ["python", str(SIMULATION_BASE_DIR / "request_rate_sweep.py")], # ["python", os.path.join(SIMULATION_BASE_DIR, "request_rate_sweep.py")],
+            #     check=True,
+            #     env={**os.environ, "SIMULATION_BASE_DIR": SIMULATION_BASE_DIR},
+            # )
+            runpy.run_module("request_rate_sweep", run_name="__main__")
             
             print("reading results")
             df = pd.read_csv(results_file_path)

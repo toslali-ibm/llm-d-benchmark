@@ -114,3 +114,12 @@ Here is a list of all the data classes and functions for the Capacity Planner:
 |               | `set_batch_size()`                | recomputes KV cache details given a new batch size / concurrency
 |               | `total_kv_cache_blocks()`                | Calculate the total number of KV cache blocks that can fit in GPU memory                                                                                                          |   |
 |               | attributes                        | KVCacheDetail stores information relevant to calculating KV cache requirement, <br>such as `attention_type`, `num_hidden_layers`, `kv_lora_rank` for MLA models. <br>Outputs include `num_attention_group`, `per_token_memory_bytes`, `per_request_kv_cache_bytes`,<br>`per_request_kv_cache_gb`, and `kv_cache_size_gb` |   |
+
+
+## Using BLIS
+
+```
+pip install git+https://github.com/inference-sim/inference-sim.git
+```
+- then boot config explorer, and navigate the third page (`.venv/bin/streamlit run config_explorer/Capacity_Planner.py`)
+
